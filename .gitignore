@@ -13,6 +13,10 @@
 node_modules/
 npm-debug.log
 yarn-error.log
+__pycache__/
+*.py[cod]
+*$py.class
+
 
 # Flutter / Dart / Android
 .dart_tool/
@@ -26,3 +30,5 @@ build/
 .env
 .env.local
 sahra/
+release_apks/
+
