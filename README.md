@@ -40,18 +40,39 @@ Traditional disaster response relies on centralized cellular infrastructure:
 
 ```mermaid
 flowchart TD
-    subgraph Traditional ["Traditional Systems: Single Point of Failure"]
-        T1["Citizen Stranded in Flood"] -->|"Requires cellular tower"| T2["Local Cellular Base Station"]
-        T2 -->|"Flooding / grid failure"| T3["Telecom Blackout ('No Service')"]
-        T3 -->|"Distress call dropped"| T4["Rescue Teams Operate Blind"]
+    subgraph Traditional ["Traditional Cellular Infrastructure: Single Point of Failure"]
+        direction TB
+        T1["Citizen Stranded in Flood"]
+        T2["Local Cellular Tower (Flooded / Power Grid Down)"]
+        T3["Network Blackout: Phones Display 'No Service'"]
+        T4["Distress Signal Lost: Rescue Teams Operate Blind"]
+
+        T1 -->|"Requires active cellular tower"| T2
+        T2 -->|"Towers exhaust backup batteries"| T3
+        T3 -->|"Zero packets escape disaster zone"| T4
     end
 
-    subgraph Sahara ["SAHARA Mesh: Autonomous & Decentralized"]
-        S1["Citizen Stranded in Flood"] -->|"Zero-infrastructure radio (BLE / Wi-Fi Direct)"| S2["Neighboring Devices (Relay Node)"]
-        S2 -->|"Multi-hop / Store & Forward"| S3["Rescue Boat / Volunteer Drone"]
-        S3 -->|"Direct packet delivery"| S4["Rescue Team Dispatched with Precise GPS"]
+    T4 -->|"Solved by Decentralized Mesh"| S1
+
+    subgraph Sahara ["SAHARA Autonomous Radio Mesh: Resilient Multi-Hop Relay"]
+        direction TB
+        S1["Citizen Stranded in Flood"]
+        S2["Neighboring Smartphones Form P2P Mesh (BLE & Wi-Fi Direct)"]
+        S3["Packets Relay Device-to-Device via Store & Forward"]
+        S4["Rescue Boats & Responders Receive Exact GPS & Battery Status"]
+
+        S1 -->|"1-Tap SOS (no SIM or internet needed)"| S2
+        S2 -->|"Multi-hop transmission across 100m+ links"| S3
+        S3 -->|"Direct delivery to disaster responder"| S4
     end
 ```
+
+| Failure Mode in Traditional Telecom | How SAHARA Solves It |
+|---|---|
+| **Tower & Grid Failure**: Base stations flood or lose power within 6–12 hours, cutting off entire districts. | **Zero Infrastructure Dependency**: Operates device-to-device over BLE and Wi-Fi Direct without towers or servers. |
+| **The 'No Service' Dead End**: Phones show 'No Service', preventing any 112 calls or SMS distress messages. | **Instant Peer Discovery**: Every smartphone running SAHARA becomes an active relay node for everyone nearby. |
+| **Unreachability & Search Delays**: Responders cannot locate victims trapped in submerged neighborhoods. | **High-Priority SOS Broadcast**: Transmits real-time GPS coordinates, battery level, and timestamp directly to rescue teams. |
+| **Disconnected Calls Dropped**: Traditional calls fail permanently if a connection is not immediately available. | **Store & Forward (DTN)**: Unreachable messages are buffered locally and automatically forwarded when a peer arrives. |
 
 ### The "No Service" Paradox
 During floods, citizens almost always have smartphones with them, and those devices often retain battery charge for 24 to 48 hours. However, because the surrounding towers are flooded or powered down, those phones display **"No Service"** or **"Emergency Calls Only"**, rendering them completely useless when people need help most.
