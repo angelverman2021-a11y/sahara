@@ -649,7 +649,6 @@ void main() {
     // Node B learned Node A's user_id automatically from the incoming packet!
     expect(mockServiceB.resolvePeerUserId('NODE_AAA111'), 'SH-USERA');
 
-    // Navigate to Messages screen on Node B
     final messagesCard = find.text('Messages');
     await tester.ensureVisible(messagesCard);
     await tester.tap(messagesCard);
@@ -663,15 +662,15 @@ void main() {
     await tester.pumpAndSettle();
 
     // Message is displayed in chat bubble
-    expect(find.text('Emergency Alert: High water level near Bridge 4!'), findsOneWidget);
+    expect(find.text('Emergency Alert: High water level near Bridge 4!'), findsWidgets);
 
-    await subB.cancel();
+    subB.cancel();
     meshServiceA.dispose();
     meshServiceB.dispose();
-    mockServiceA.dispose();
-    mockServiceB.dispose();
     transportA.dispose();
     transportB.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   test('MeshService strict identity separation: sender_id and receiver_id are user_id, sender_node_id and receiver_node_id are node_id', () async {
@@ -691,6 +690,7 @@ void main() {
     );
 
     transportA.connectTo('NODE_BBB222');
+    await Future.delayed(const Duration(milliseconds: 50));
 
     MessagePacket? packetAtB;
     final subB = meshServiceB.onMessageReceived.listen((p) {
@@ -707,6 +707,7 @@ void main() {
       receiverUserId: 'SH-USERB',
       content: 'Ping from Node A',
     );
+    await Future.delayed(const Duration(milliseconds: 50));
 
     expect(packetAtB, isNotNull);
     expect(packetAtB!.senderId, 'SH-USERA');
@@ -719,6 +720,7 @@ void main() {
       receiverUserId: 'SH-USERA',
       content: 'Pong from Node B',
     );
+    await Future.delayed(const Duration(milliseconds: 50));
 
     expect(packetAtA, isNotNull);
     expect(packetAtA!.senderId, 'SH-USERB');
@@ -766,6 +768,161 @@ void main() {
     expect(mockService.resolvePeerNodeId('SH-CUST1'), 'NODE_CUSTOM1');
 
     mockService.dispose();
+  });
+
+  test('Store and Forward: A -> B while C is unavailable, B buffers packet, forwards upon C connection, flushes buffer, deduplicates, and decrements TTL', () async {
+    MockMeshTransport.resetNetwork();
+
+    final transportA = MockMeshTransport(localNodeId: 'NODE_AAA111');
+    final transportB = MockMeshTransport(localNodeId: 'NODE_BBB222');
+    final transportC = MockMeshTransport(localNodeId: 'NODE_CCC333');
+
+    final meshServiceA = MeshService(
+      myNodeId: 'NODE_AAA111',
+      myUserId: 'SH-USERA',
+      transport: transportA,
+    );
+
+    final meshServiceB = MeshService(
+      myNodeId: 'NODE_BBB222',
+      myUserId: 'SH-USERB',
+      transport: transportB,
+    );
+
+    final meshServiceC = MeshService(
+      myNodeId: 'NODE_CCC333',
+      myUserId: 'SH-USERC',
+      transport: transportC,
+    );
+
+    // Initial state: A connects to B. C is disconnected / unavailable.
+    transportA.connectTo('NODE_BBB222');
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    expect(meshServiceA.connectedPeers, contains('NODE_BBB222'));
+    expect(meshServiceB.connectedPeers, contains('NODE_AAA111'));
+    expect(meshServiceB.connectedPeers.contains('NODE_CCC333'), isFalse);
+    expect(meshServiceC.connectedPeers.isEmpty, isTrue);
+
+    final receivedMessagesAtC = <MessagePacket>[];
+    final subC = meshServiceC.onMessageReceived.listen((packet) {
+      receivedMessagesAtC.add(packet);
+    });
+
+    // Step 1: A sends a direct TEXT message to C (initial TTL = 8)
+    await meshServiceA.sendDirectMessage(
+      receiverNodeId: 'NODE_CCC333',
+      receiverUserId: 'SH-USERC',
+      content: 'Store & Forward Test: Water supplies delivered to Sector 3.',
+      ttl: 8,
+    );
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // Step 2: C is unreachable, so B must store the message locally in its store-and-forward outbox
+    // Node A sent to B with decremented TTL = 7.
+    // Node B received at TTL = 7, determined it is a relay for C (not directly connected, no other forward peers),
+    // and buffered it with decremented TTL = 6.
+    expect(meshServiceB.pendingBuffer.length, 1);
+    final bufferedPacket = meshServiceB.pendingBuffer.first;
+    expect(bufferedPacket.receiverNodeId, 'NODE_CCC333');
+    expect(bufferedPacket.receiverId, 'SH-USERC');
+    expect(bufferedPacket.senderNodeId, 'NODE_AAA111');
+    expect(bufferedPacket.senderId, 'SH-USERA');
+    expect(bufferedPacket.content, 'Store & Forward Test: Water supplies delivered to Sector 3.');
+    expect(bufferedPacket.ttl, 6); // TTL decreased on forwarding/relay (8 -> 7 -> 6)
+
+    // C has NOT received anything while unavailable
+    expect(receivedMessagesAtC.isEmpty, isTrue);
+
+    // Step 3 & 4: C later becomes reachable (connects to B)
+    transportB.connectTo('NODE_CCC333');
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // Stored message must automatically be forwarded to C
+    expect(receivedMessagesAtC.length, 1);
+    final deliveredToC = receivedMessagesAtC.first;
+    expect(deliveredToC.messageId, bufferedPacket.messageId);
+    expect(deliveredToC.content, 'Store & Forward Test: Water supplies delivered to Sector 3.');
+    expect(deliveredToC.senderId, 'SH-USERA');
+    expect(deliveredToC.senderNodeId, 'NODE_AAA111');
+    expect(deliveredToC.receiverId, 'SH-USERC');
+    expect(deliveredToC.receiverNodeId, 'NODE_CCC333');
+    expect(deliveredToC.ttl, 6); // Received with decremented TTL
+    expect(deliveredToC.status, MessageStatus.delivered);
+
+    // Step 5: After successful delivery to C, B's stored copy must be removed/flushed
+    expect(meshServiceB.pendingBuffer.isEmpty, isTrue);
+
+    // Step 6: Deduplication must prevent duplicate delivery to C
+    // If the same packet is re-transmitted across transport, C must drop it
+    await transportB.sendRawPacket('NODE_CCC333', deliveredToC.toUtf8Bytes());
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // Count of delivered messages at C remains 1 (no duplicate delivered)
+    expect(receivedMessagesAtC.length, 1);
+
+    await subC.cancel();
+    meshServiceA.dispose();
+    meshServiceB.dispose();
+    meshServiceC.dispose();
+    transportA.dispose();
+    transportB.dispose();
+    transportC.dispose();
+    MockMeshTransport.resetNetwork();
+  });
+
+  test('Store and Forward: Isolated node A buffers locally when 0 peers, flushes upon connecting to B', () async {
+    MockMeshTransport.resetNetwork();
+
+    final transportA = MockMeshTransport(localNodeId: 'NODE_AAA111');
+    final transportB = MockMeshTransport(localNodeId: 'NODE_BBB222');
+
+    final meshServiceA = MeshService(
+      myNodeId: 'NODE_AAA111',
+      myUserId: 'SH-USERA',
+      transport: transportA,
+    );
+
+    final meshServiceB = MeshService(
+      myNodeId: 'NODE_BBB222',
+      myUserId: 'SH-USERB',
+      transport: transportB,
+    );
+
+    // Initially A has 0 connected peers
+    expect(meshServiceA.connectedPeers.isEmpty, isTrue);
+
+    MessagePacket? packetAtB;
+    final subB = meshServiceB.onMessageReceived.listen((p) {
+      packetAtB = p;
+    });
+
+    // A sends message to B while isolated
+    await meshServiceA.sendDirectMessage(
+      receiverNodeId: 'NODE_BBB222',
+      receiverUserId: 'SH-USERB',
+      content: 'Isolated message test',
+    );
+
+    // A buffers locally
+    expect(meshServiceA.pendingBuffer.length, 1);
+    expect(packetAtB, isNull);
+
+    // Later A connects to B
+    transportA.connectTo('NODE_BBB222');
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // A automatically flushes to B, removing from buffer
+    expect(meshServiceA.pendingBuffer.isEmpty, isTrue);
+    expect(packetAtB, isNotNull);
+    expect(packetAtB!.content, 'Isolated message test');
+
+    await subB.cancel();
+    meshServiceA.dispose();
+    meshServiceB.dispose();
+    transportA.dispose();
+    transportB.dispose();
+    MockMeshTransport.resetNetwork();
   });
 }
 

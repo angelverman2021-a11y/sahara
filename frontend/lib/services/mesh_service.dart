@@ -383,7 +383,9 @@ class MeshService {
     }
 
     // Otherwise, flood to all available peers except sender
-    final targetPeers = _connectedPeers.where((p) => p != fromPeerId).toList();
+    final targetPeers = _connectedPeers
+        .where((p) => p.trim().toUpperCase() != fromPeerId.trim().toUpperCase())
+        .toList();
     if (targetPeers.isNotEmpty) {
       debugPrint('[SAHARA ROUTE] Flooding packet ${packet.messageId} to ${targetPeers.length} peers: $targetPeers');
       final payload = packet.toUtf8Bytes();
@@ -399,7 +401,7 @@ class MeshService {
   void _relayToAllPeersExcept(String fromPeerId, MessagePacket packet) {
     final payload = packet.toUtf8Bytes();
     for (final peer in _connectedPeers) {
-      if (peer != fromPeerId) {
+      if (peer.trim().toUpperCase() != fromPeerId.trim().toUpperCase()) {
         transport.sendRawPacket(peer, payload);
       }
     }
@@ -435,7 +437,7 @@ class MeshService {
 
     for (final packet in List<MessagePacket>.from(_storeAndForwardBuffer)) {
       // Case A: Newly connected peer is the target destination
-      if (packet.receiverNodeId == newPeerId) {
+      if (packet.receiverNodeId.trim().toUpperCase() == newPeerId.trim().toUpperCase()) {
         transport.sendRawPacket(newPeerId, packet.toUtf8Bytes());
         toRemove.add(packet);
       }
