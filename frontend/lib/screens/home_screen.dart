@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/person.dart';
+import '../services/emergency_service.dart';
 import '../services/native_bridge.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
@@ -9,6 +11,7 @@ import '../widgets/feature_card.dart';
 import '../widgets/sos_button.dart';
 import '../widgets/status_card.dart';
 import 'broadcast_screen.dart';
+import 'chat_screen.dart';
 import 'family_screen.dart';
 import 'messages_screen.dart';
 import 'nearby_screen.dart';
@@ -23,6 +26,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -135,7 +142,63 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   color: AppTheme.textMuted,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
+
+              // Global Contact Search Bar
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(AppTheme.radius),
+                  border: Border.all(color: AppTheme.surfaceBorder),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                    });
+                  },
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontSize: 13.5,
+                    color: AppTheme.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: context.tr('search_people_placeholder'),
+                    hintStyle: const TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 13,
+                      color: AppTheme.textMuted,
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 18, color: AppTheme.textSecondary),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16, color: AppTheme.textMuted),
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                ),
+              ),
+
+              // If searching, show results inline
+              if (_searchQuery.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _buildSearchResultsView(context, service),
+                const SizedBox(height: 14),
+              ] else ...[
+                const SizedBox(height: 14),
+              ],
 
               // 3. Compact Mesh/Network Status (Mesh Active, nearby count, real battery %)
               StatusCard(
@@ -267,6 +330,239 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResultsView(BuildContext context, EmergencyService service) {
+    final results = service.searchPeople(_searchQuery);
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(color: AppTheme.surfaceBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'PEOPLE FOUND (${results.length})',
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: AppTheme.primaryNavy,
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = '';
+                    });
+                  },
+                  child: Text(
+                    context.tr('cancel'),
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppTheme.surfaceBorder),
+          if (results.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Center(
+                child: Text(
+                  context.tr('no_people_found'),
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontSize: 13,
+                    color: AppTheme.textMuted,
+                  ),
+                ),
+              ),
+            )
+          else
+            for (int i = 0; i < results.length; i++) ...[
+              if (i > 0) const Divider(height: 1, color: AppTheme.surfaceBorder),
+              _buildSearchResultRow(context, service, results[i]),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchResultRow(BuildContext context, EmergencyService service, Person person) {
+    final isFamily = person.relation == PersonRelation.family;
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ChatScreen(person: person)),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            // Avatar
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: isFamily ? AppTheme.primaryNavy : AppTheme.secondaryBlue,
+              child: Text(
+                person.name.isNotEmpty ? person.name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  fontFamily: AppTheme.fontFamily,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // Name and Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          person.name,
+                          style: const TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: isFamily ? AppTheme.blueSurfaceTint : AppTheme.surfaceSubtle,
+                          borderRadius: BorderRadius.circular(AppTheme.radius),
+                          border: Border.all(color: AppTheme.surfaceBorder),
+                        ),
+                        child: Text(
+                          isFamily
+                              ? context.tr('family')
+                              : (person.relation == PersonRelation.emergencyTeam
+                                  ? 'Team'
+                                  : context.tr('nearby')),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: isFamily ? AppTheme.primaryNavy : AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    person.phoneNumber ?? person.lastKnownLocation,
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+
+            // Actions: Ping and Add to Family
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(
+                  onPressed: () {
+                    service.pingPerson(person.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.tr('ping_sent_to', {'name': person.name})),
+                        duration: const Duration(seconds: 2),
+                        backgroundColor: AppTheme.primaryNavy,
+                      ),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primaryNavy,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: const BorderSide(color: AppTheme.surfaceBorder),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radius),
+                    ),
+                  ),
+                  child: Text(
+                    context.tr('ping'),
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (!isFamily) ...[
+                  const SizedBox(width: 6),
+                  ElevatedButton(
+                    onPressed: () {
+                      service.addPersonToFamily(person);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.tr('added_to_family', {'name': person.name})),
+                          duration: const Duration(seconds: 2),
+                          backgroundColor: AppTheme.activeGreen,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryNavy,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radius),
+                      ),
+                    ),
+                    child: Text(
+                      context.tr('add_as_family'),
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );

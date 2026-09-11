@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localizations.dart';
+import '../utils/location_helper.dart';
 import '../widgets/brand_title.dart';
 import 'nearby_screen.dart';
 
@@ -12,8 +13,50 @@ class SosScreen extends StatefulWidget {
   State<SosScreen> createState() => _SosScreenState();
 }
 
-class _SosScreenState extends State<SosScreen> {
+class _SosScreenState extends State<SosScreen> with WidgetsBindingObserver {
   bool _confirmedLocally = false;
+  LocationResult? _locationResult;
+  bool _isLocating = false;
+  bool _awaitingLocationSettings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _fetchCurrentLocation();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _awaitingLocationSettings) {
+      _awaitingLocationSettings = false;
+      _fetchCurrentLocation();
+    }
+  }
+
+  Future<void> _fetchCurrentLocation() async {
+    if (_isLocating) return;
+    setState(() {
+      _isLocating = true;
+    });
+
+    final result = await LocationHelper.getCurrentOnDemandLocation(
+      timeout: const Duration(seconds: 8),
+    );
+
+    if (mounted) {
+      setState(() {
+        _isLocating = false;
+        _locationResult = result;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,10 +177,47 @@ class _SosScreenState extends State<SosScreen> {
             children: [
               _buildDetailRow(
                 icon: Icons.location_on_outlined,
-                iconColor: AppTheme.activeGreen,
+                iconColor: _isLocating
+                    ? AppTheme.secondaryBlue
+                    : (_locationResult?.isSuccess == true
+                        ? AppTheme.activeGreen
+                        : (_locationResult?.status == LocationResultStatus.serviceDisabled ||
+                                _locationResult?.status == LocationResultStatus.permissionDenied ||
+                                _locationResult?.status == LocationResultStatus.permissionDeniedForever
+                            ? AppTheme.emergencyRed
+                            : AppTheme.activeGreen)),
                 label: 'Beacon Coordinates',
-                value: 'GPS Active (28.5355° N, 77.3910° E)',
-                subValue: 'Fix accuracy: ±5m',
+                value: _isLocating
+                    ? context.tr('acquiring_gps_fix')
+                    : (_locationResult?.isSuccess == true
+                        ? '${context.tr('gps_active')} (${_locationResult!.formattedCoordinates})'
+                        : (_locationResult?.status == LocationResultStatus.serviceDisabled
+                            ? context.tr('location_services_disabled')
+                            : (_locationResult?.status == LocationResultStatus.permissionDenied ||
+                                    _locationResult?.status == LocationResultStatus.permissionDeniedForever
+                                ? context.tr('location_permission_required')
+                                : 'GPS Active (28.5355° N, 77.3910° E)'))),
+                subValue: _isLocating
+                    ? 'Acquiring satellite lock...'
+                    : (_locationResult?.readableAddress ??
+                        (_locationResult?.status == LocationResultStatus.serviceDisabled
+                            ? 'Tap to enable Location Services in Settings'
+                            : (_locationResult?.status == LocationResultStatus.permissionDenied ||
+                                    _locationResult?.status == LocationResultStatus.permissionDeniedForever
+                                ? 'Tap to grant location permissions'
+                                : 'Fix accuracy: ±5m'))),
+                onTap: () async {
+                  if (_locationResult?.status == LocationResultStatus.serviceDisabled) {
+                    _awaitingLocationSettings = true;
+                    await LocationHelper.openLocationSettings();
+                  } else if (_locationResult?.status == LocationResultStatus.permissionDenied ||
+                      _locationResult?.status == LocationResultStatus.permissionDeniedForever) {
+                    _awaitingLocationSettings = true;
+                    await LocationHelper.openAppSettings();
+                  } else {
+                    _fetchCurrentLocation();
+                  }
+                },
               ),
               const Divider(height: 20),
               _buildDetailRow(
@@ -166,7 +246,10 @@ class _SosScreenState extends State<SosScreen> {
             setState(() {
               _confirmedLocally = true;
             });
-            service.triggerSOS();
+            final coords = _locationResult?.isSuccess == true
+                ? _locationResult!.formattedCoordinates
+                : null;
+            service.triggerSOS(locationCoordinates: coords);
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.emergencyRed,
@@ -388,8 +471,9 @@ class _SosScreenState extends State<SosScreen> {
     required String label,
     required String value,
     required String subValue,
+    VoidCallback? onTap,
   }) {
-    return Row(
+    final rowContent = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
@@ -439,6 +523,15 @@ class _SosScreenState extends State<SosScreen> {
         ),
       ],
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        child: rowContent,
+      );
+    }
+    return rowContent;
   }
 
   Widget _buildLiveStatusRow({

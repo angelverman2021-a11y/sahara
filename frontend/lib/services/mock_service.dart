@@ -398,12 +398,35 @@ class MockService extends EmergencyService {
   }
 
   @override
-  void triggerSOS() {
+  List<Person> get allKnownPeople => List.unmodifiable(_people);
+
+  @override
+  List<Person> searchPeople(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final digitsOnly = query.replaceAll(RegExp(r'\D'), '');
+
+    return _people.where((p) {
+      final nameMatches = p.name.toLowerCase().contains(q);
+      final phone = p.phoneNumber ?? '';
+      final phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
+      final phoneMatches = (digitsOnly.isNotEmpty && phoneDigits.contains(digitsOnly)) ||
+          phone.toLowerCase().contains(q);
+      return nameMatches || phoneMatches;
+    }).toList();
+  }
+
+  @override
+  void triggerSOS({String? locationCoordinates}) {
     _meshStatus = _meshStatus.copyWith(
       isBroadcastingSOS: true,
       activeRelays: 4,
       lastSynced: DateTime.now(),
     );
+
+    final coords = (locationCoordinates != null && locationCoordinates.isNotEmpty)
+        ? locationCoordinates
+        : '28.5355° N, 77.3910° E';
 
     _broadcasts.insert(
       0,
@@ -412,7 +435,7 @@ class MockService extends EmergencyService {
         senderId: 'me',
         receiverId: 'all',
         senderName: 'You (EMERGENCY SOS)',
-        content: 'EMERGENCY DISTRESS SIGNAL: Assistance needed at current location (28.5355° N, 77.3910° E).',
+        content: 'EMERGENCY DISTRESS SIGNAL: Assistance needed at current location ($coords).',
         timestamp: DateTime.now(),
         type: MessageType.sosAlert,
         priority: MessagePriority.critical,

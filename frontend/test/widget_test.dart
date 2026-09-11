@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sahra/main.dart';
 import 'package:sahra/services/mock_service.dart';
 import 'package:sahra/utils/date_input_formatter.dart';
+import 'package:sahra/utils/location_helper.dart';
 import 'package:sahra/widgets/app_logo.dart';
 import 'package:sahra/widgets/brand_title.dart';
 import 'package:sahra/widgets/person_tile.dart';
@@ -327,5 +328,61 @@ void main() {
     expect(DateInputFormatter.isValidDate('12/05/2004'), true);
     expect(DateInputFormatter.isValidDate('31/02/2020'), false); // Invalid Feb 31
     expect(DateInputFormatter.isValidDate('35/10/2020'), false); // Invalid day 35
+  });
+
+  testWidgets('Home Global Contact Search searches by name and phone number inline', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService();
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockService,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // 1. Search bar is present on Home screen
+    final searchField = find.widgetWithText(TextField, 'Search people by name or phone number');
+    expect(searchField, findsOneWidget);
+
+    // 2. Type "Mother"
+    await tester.enterText(searchField, 'Mother');
+    await tester.pumpAndSettle();
+
+    // Search results are rendered on Home
+    expect(find.textContaining('PEOPLE FOUND'), findsOneWidget);
+    expect(find.text('Mother'), findsAtLeastNWidgets(1));
+    expect(find.text('+91 98100 12345'), findsOneWidget);
+
+    // 3. Type phone number "67890" (Father's phone is +91 98100 67890)
+    await tester.enterText(searchField, '67890');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Father'), findsOneWidget);
+    expect(find.text('+91 98100 67890'), findsOneWidget);
+
+    // 4. Test Ping action on search result
+    final pingBtn = find.widgetWithText(OutlinedButton, 'Ping');
+    expect(pingBtn, findsAtLeastNWidgets(1));
+    await tester.tap(pingBtn.first);
+    await tester.pumpAndSettle();
+    expect(find.text('Ping sent to Father'), findsOneWidget);
+
+    // 5. Clear search query
+    await tester.enterText(searchField, '');
+    await tester.pumpAndSettle();
+
+    // Results view closes, standard Home is visible
+    expect(find.textContaining('PEOPLE FOUND'), findsNothing);
+    expect(find.text('EMERGENCY BROADCAST'), findsOneWidget);
+  });
+
+  test('LocationHelper cleanly formats coordinates and handles fallback', () {
+    expect(
+      LocationHelper.formatCoordinates(28.5355, 77.3910, 5),
+      '28.5355° N, 77.3910° E (±5m)',
+    );
+    expect(
+      LocationHelper.formatCoordinates(-12.3456, -45.6789),
+      '12.3456° S, 45.6789° W',
+    );
   });
 }

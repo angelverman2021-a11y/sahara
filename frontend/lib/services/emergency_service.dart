@@ -18,8 +18,9 @@ abstract class EmergencyService extends ChangeNotifier {
 
   List<Message> getMessages(String personId);
   Person? getPersonById(String id);
-
-  void triggerSOS();
+  List<Person> get allKnownPeople;
+  List<Person> searchPeople(String query);
+  void triggerSOS({String? locationCoordinates});
   void cancelSOS();
   void sendMessage({
     required String receiverId,

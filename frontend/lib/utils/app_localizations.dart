@@ -141,6 +141,18 @@ class AppLocalizations {
       'search': 'Search',
       'cancel': 'Cancel',
       'save': 'Save',
+      'enable_location_services': 'Enable Location Services',
+      'enable_location_services_desc': 'Location services (GPS) are turned off on your device. Sahara requires location services to determine your emergency coordinates.',
+      'open_settings': 'Open Settings',
+      'location_permission_required': 'Location Permission Required',
+      'location_permission_settings_desc': 'Location permission was denied. Please allow location access in Sahara app settings to detect your coordinates.',
+      'location_detected': 'Location detected successfully',
+      'acquiring_gps_fix': 'Acquiring GPS fix...',
+      'gps_active': 'GPS Active',
+      'search_people_placeholder': 'Search people by name or phone number',
+      'no_people_found': 'No people or contacts found',
+      'all_contacts': 'All Contacts & Nearby',
+      'retry': 'Retry',
     },
 
     // -------------------------------------------------------------

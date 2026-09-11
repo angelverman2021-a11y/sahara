@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_localizations.dart';
 import '../../utils/date_input_formatter.dart';
+import '../../utils/location_helper.dart';
 
 class PersonalDetailsScreen extends StatefulWidget {
   final String initialName;
@@ -35,7 +34,7 @@ class PersonalDetailsScreen extends StatefulWidget {
   State<PersonalDetailsScreen> createState() => _PersonalDetailsScreenState();
 }
 
-class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
+class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
@@ -43,10 +42,13 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   late final TextEditingController _locationController;
   String? _photoPath;
   bool _isLocating = false;
+  String? _locationError;
+  bool _awaitingLocationSettings = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _nameController = TextEditingController(text: widget.initialName);
     _phoneController = TextEditingController(text: widget.initialPhone);
     _dobController = TextEditingController(text: widget.initialDob);
@@ -56,11 +58,20 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _nameController.dispose();
     _phoneController.dispose();
     _dobController.dispose();
     _locationController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _awaitingLocationSettings) {
+      _awaitingLocationSettings = false;
+      _useCurrentOnDemandLocation(autoRetry: true);
+    }
   }
 
   void _handlePickPhoto() {
@@ -182,118 +193,199 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     }
   }
 
-  Future<void> _useCurrentOnDemandLocation() async {
+  Future<void> _useCurrentOnDemandLocation({bool autoRetry = false}) async {
     if (_isLocating) return;
     setState(() {
       _isLocating = true;
+      _locationError = null;
     });
 
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.tr('location_services_disabled')),
-              backgroundColor: AppTheme.emergencyRed,
-            ),
-          );
-        }
-        return;
-      }
+    final result = await LocationHelper.getCurrentOnDemandLocation();
 
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(context.tr('location_permission_denied')),
-                backgroundColor: AppTheme.emergencyRed,
-              ),
-            );
-          }
-          return;
-        }
-      }
+    if (!mounted) return;
 
-      if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.tr('location_permission_denied_forever')),
-              backgroundColor: AppTheme.emergencyRed,
-            ),
-          );
-        }
-        return;
-      }
+    setState(() {
+      _isLocating = false;
+    });
 
-      if (mounted) {
+    switch (result.status) {
+      case LocationResultStatus.success:
+        setState(() {
+          _locationController.text = result.displayText;
+          _locationError = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.tr('acquiring_location')),
+            content: Text(context.tr('location_detected')),
+            backgroundColor: AppTheme.activeGreen,
             duration: const Duration(seconds: 2),
           ),
         );
-      }
+        break;
 
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
-
-      String addressText = '';
-      try {
-        final placemarks = await Geocoding().placemarkFromCoordinates(
-          position.latitude,
-          position.longitude,
-        );
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          final parts = [
-            p.subLocality,
-            p.locality,
-            p.subAdministrativeArea,
-            p.administrativeArea,
-          ].where((s) => s != null && s.trim().isNotEmpty).toSet().toList();
-          if (parts.isNotEmpty) {
-            addressText = parts.join(', ');
-          }
-        }
-      } catch (_) {}
-
-      final latStr = '${position.latitude.abs().toStringAsFixed(4)}° ${position.latitude >= 0 ? "N" : "S"}';
-      final lonStr = '${position.longitude.abs().toStringAsFixed(4)}° ${position.longitude >= 0 ? "E" : "W"}';
-
-      if (mounted) {
+      case LocationResultStatus.serviceDisabled:
         setState(() {
-          if (addressText.isNotEmpty) {
-            _locationController.text = '$addressText ($latStr, $lonStr)';
-          } else {
-            _locationController.text = '$latStr, $lonStr';
-          }
+          _locationError = context.tr('location_services_disabled');
         });
-      }
-    } catch (e) {
-      if (mounted) {
+        if (!autoRetry) {
+          _showEnableLocationServicesDialog();
+        }
+        break;
+
+      case LocationResultStatus.permissionDenied:
+        setState(() {
+          _locationError = context.tr('location_permission_denied');
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to retrieve location: $e'),
+            content: Text(context.tr('location_permission_denied')),
             backgroundColor: AppTheme.emergencyRed,
+            action: SnackBarAction(
+              label: context.tr('retry'),
+              textColor: Colors.white,
+              onPressed: () => _useCurrentOnDemandLocation(),
+            ),
           ),
         );
-      }
-    } finally {
-      if (mounted) {
+        break;
+
+      case LocationResultStatus.permissionDeniedForever:
         setState(() {
-          _isLocating = false;
+          _locationError = context.tr('location_permission_denied_forever');
         });
-      }
+        if (!autoRetry) {
+          _showPermissionSettingsDialog();
+        }
+        break;
+
+      case LocationResultStatus.timeout:
+      case LocationResultStatus.error:
+        setState(() {
+          _locationError = result.errorMessage ?? 'Could not detect GPS fix. Please enter manually.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.errorMessage ?? 'GPS signal weak or unavailable.'),
+            backgroundColor: AppTheme.relayAmber,
+            action: SnackBarAction(
+              label: context.tr('retry'),
+              textColor: Colors.white,
+              onPressed: () => _useCurrentOnDemandLocation(),
+            ),
+          ),
+        );
+        break;
     }
+  }
+
+  void _showEnableLocationServicesDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radius)),
+        title: Row(
+          children: [
+            const Icon(Icons.location_off_outlined, color: AppTheme.emergencyRed, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.tr('enable_location_services'),
+                style: const TextStyle(
+                  fontFamily: AppTheme.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          context.tr('enable_location_services_desc'),
+          style: const TextStyle(
+            fontFamily: AppTheme.fontFamily,
+            fontSize: 13.5,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(
+              context.tr('cancel'),
+              style: const TextStyle(color: AppTheme.textMuted),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              _awaitingLocationSettings = true;
+              await LocationHelper.openLocationSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryNavy,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radius)),
+            ),
+            child: Text(context.tr('open_settings')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPermissionSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radius)),
+        title: Row(
+          children: [
+            const Icon(Icons.security_outlined, color: AppTheme.emergencyRed, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.tr('location_permission_required'),
+                style: const TextStyle(
+                  fontFamily: AppTheme.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          context.tr('location_permission_settings_desc'),
+          style: const TextStyle(
+            fontFamily: AppTheme.fontFamily,
+            fontSize: 13.5,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(
+              context.tr('cancel'),
+              style: const TextStyle(color: AppTheme.textMuted),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              _awaitingLocationSettings = true;
+              await LocationHelper.openAppSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryNavy,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radius)),
+            ),
+            child: Text(context.tr('open_settings')),
+          ),
+        ],
+      ),
+    );
   }
 
   void _submit() {
@@ -549,6 +641,29 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                   controller: _locationController,
                   decoration: InputDecoration(
                     hintText: context.tr('location_hint'),
+                    suffixIcon: _isLocating
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.primaryNavy,
+                              ),
+                            ),
+                          )
+                        : (_locationController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  setState(() {
+                                    _locationController.clear();
+                                    _locationError = null;
+                                  });
+                                },
+                              )
+                            : null),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -557,6 +672,50 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                     return null;
                   },
                 ),
+                if (_locationError != null) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.emergencyRedLight,
+                      borderRadius: BorderRadius.circular(AppTheme.radius),
+                      border: Border.all(color: AppTheme.emergencyRedBorder),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 16, color: AppTheme.emergencyRed),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _locationError!,
+                            style: const TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              color: AppTheme.emergencyRed,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _useCurrentOnDemandLocation(),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            context.tr('retry'),
+                            style: const TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.emergencyRed,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 28),
 
                 // Continue Button
