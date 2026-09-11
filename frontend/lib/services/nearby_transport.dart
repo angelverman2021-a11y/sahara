@@ -3,8 +3,8 @@
 // Strictly decouples physical hardware transport from the MeshService routing engine.
 
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 
 import 'mesh_service.dart';
@@ -95,14 +95,17 @@ class NearbyConnectionsTransport implements MeshTransport {
   Future<bool> sendRawPacket(String peerId, List<int> bytes) async {
     final endpointId = _nodeIdToEndpointId[peerId];
     if (endpointId == null || !_connectedPeers.contains(peerId)) {
+      debugPrint('[SAHARA TRANSPORT] Cannot send packet: peer $peerId not connected (endpoint: $endpointId)');
       return false;
     }
 
     try {
       final payload = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+      debugPrint('[SAHARA TRANSPORT] Sending packet to $peerId ($endpointId): ${bytes.length} bytes');
       await nearby.sendBytesPayload(endpointId, payload);
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[SAHARA TRANSPORT] Error sending packet to $peerId: $e');
       return false;
     }
   }
@@ -115,6 +118,7 @@ class NearbyConnectionsTransport implements MeshTransport {
     if (_isAdvertising) return;
 
     try {
+      debugPrint('[SAHARA TRANSPORT] Starting advertising as Node ID: $localNodeId...');
       final started = await nearby.startAdvertising(
         localNodeId,
         strategy,
@@ -124,7 +128,9 @@ class NearbyConnectionsTransport implements MeshTransport {
         serviceId: serviceId,
       );
       _isAdvertising = started;
-    } catch (_) {
+      debugPrint('[SAHARA TRANSPORT] Advertising started: $started (Node ID: $localNodeId)');
+    } catch (e) {
+      debugPrint('[SAHARA TRANSPORT] Advertising failed to start: $e');
       _isAdvertising = false;
     }
   }
@@ -137,6 +143,7 @@ class NearbyConnectionsTransport implements MeshTransport {
     if (_isDiscovering) return;
 
     try {
+      debugPrint('[SAHARA TRANSPORT] Starting discovery as Node ID: $localNodeId...');
       final started = await nearby.startDiscovery(
         localNodeId,
         strategy,
@@ -145,7 +152,9 @@ class NearbyConnectionsTransport implements MeshTransport {
         serviceId: serviceId,
       );
       _isDiscovering = started;
-    } catch (_) {
+      debugPrint('[SAHARA TRANSPORT] Discovery started: $started (Node ID: $localNodeId)');
+    } catch (e) {
+      debugPrint('[SAHARA TRANSPORT] Discovery failed to start: $e');
       _isDiscovering = false;
     }
   }
@@ -157,6 +166,7 @@ class NearbyConnectionsTransport implements MeshTransport {
   /// Triggered when a nearby SAHARA peer endpoint is discovered.
   void _handleEndpointFound(String endpointId, String endpointName, String serviceId) async {
     final peerNodeId = endpointName;
+    debugPrint('[SAHARA TRANSPORT] Endpoint discovered: $endpointId -> Node ID: $peerNodeId');
     _endpointIdToNodeId[endpointId] = peerNodeId;
     _nodeIdToEndpointId[peerNodeId] = endpointId;
 
@@ -168,6 +178,7 @@ class NearbyConnectionsTransport implements MeshTransport {
     // In P2P_CLUSTER, initiate connection if not already connected
     if (!_connectedPeers.contains(peerNodeId)) {
       try {
+        debugPrint('[SAHARA TRANSPORT] Requesting connection to $endpointId ($peerNodeId)...');
         await nearby.requestConnection(
           localNodeId,
           endpointId,
@@ -175,8 +186,8 @@ class NearbyConnectionsTransport implements MeshTransport {
           onConnectionResult: _handleConnectionResult,
           onDisconnected: _handleDisconnected,
         );
-      } catch (_) {
-        // Connection request collision or already requested; handled gracefully
+      } catch (e) {
+        debugPrint('[SAHARA TRANSPORT] Connection request collision/error with $peerNodeId: $e');
       }
     }
   }
@@ -185,6 +196,7 @@ class NearbyConnectionsTransport implements MeshTransport {
   void _handleEndpointLost(String? endpointId) {
     if (endpointId == null) return;
     final peerNodeId = _endpointIdToNodeId[endpointId];
+    debugPrint('[SAHARA TRANSPORT] Endpoint lost: $endpointId ($peerNodeId)');
     if (peerNodeId != null && !_connectedPeers.contains(peerNodeId)) {
       _endpointIdToNodeId.remove(endpointId);
       _nodeIdToEndpointId.remove(peerNodeId);
@@ -194,15 +206,18 @@ class NearbyConnectionsTransport implements MeshTransport {
   /// Triggered when either peer requests a connection. Automatically accepts.
   void _handleConnectionInitiated(String endpointId, ConnectionInfo info) async {
     final peerNodeId = info.endpointName;
+    debugPrint('[SAHARA TRANSPORT] Connection initiated: $endpointId ($peerNodeId), incoming: ${info.isIncomingConnection}');
     _endpointIdToNodeId[endpointId] = peerNodeId;
     _nodeIdToEndpointId[peerNodeId] = endpointId;
 
     try {
+      debugPrint('[SAHARA TRANSPORT] Auto-accepting connection with $endpointId ($peerNodeId)...');
       await nearby.acceptConnection(
         endpointId,
         onPayLoadRecieved: (String epId, Payload payload) {
           if (payload.type == PayloadType.BYTES && payload.bytes != null) {
             final senderNodeId = _endpointIdToNodeId[epId] ?? epId;
+            debugPrint('[SAHARA TRANSPORT] Packet received from $senderNodeId ($epId): ${payload.bytes!.length} bytes');
             _eventsController.add(MeshTransportEvent(
               type: MeshTransportEventType.packetReceived,
               peerId: senderNodeId,
@@ -211,17 +226,19 @@ class NearbyConnectionsTransport implements MeshTransport {
           }
         },
       );
-    } catch (_) {
-      // Handshake error
+    } catch (e) {
+      debugPrint('[SAHARA TRANSPORT] Error accepting connection from $peerNodeId: $e');
     }
   }
 
   /// Triggered when the mutual connection handshake succeeds or fails.
   void _handleConnectionResult(String endpointId, Status status) {
     final peerNodeId = _endpointIdToNodeId[endpointId] ?? endpointId;
+    debugPrint('[SAHARA TRANSPORT] Connection result for $endpointId ($peerNodeId): $status');
 
     if (status == Status.CONNECTED) {
       _connectedPeers.add(peerNodeId);
+      debugPrint('[SAHARA TRANSPORT] Peer connected: $peerNodeId (Total active peers: ${_connectedPeers.length})');
       _eventsController.add(MeshTransportEvent(
         type: MeshTransportEventType.peerConnected,
         peerId: peerNodeId,
@@ -230,6 +247,7 @@ class NearbyConnectionsTransport implements MeshTransport {
       _connectedPeers.remove(peerNodeId);
       _endpointIdToNodeId.remove(endpointId);
       _nodeIdToEndpointId.remove(peerNodeId);
+      debugPrint('[SAHARA TRANSPORT] Peer connection failed/rejected: $peerNodeId');
       _eventsController.add(MeshTransportEvent(
         type: MeshTransportEventType.peerDisconnected,
         peerId: peerNodeId,
@@ -243,6 +261,7 @@ class NearbyConnectionsTransport implements MeshTransport {
     _nodeIdToEndpointId.remove(peerNodeId);
     _connectedPeers.remove(peerNodeId);
 
+    debugPrint('[SAHARA TRANSPORT] Peer disconnected: $peerNodeId (Remaining active peers: ${_connectedPeers.length})');
     _eventsController.add(MeshTransportEvent(
       type: MeshTransportEventType.peerDisconnected,
       peerId: peerNodeId,
