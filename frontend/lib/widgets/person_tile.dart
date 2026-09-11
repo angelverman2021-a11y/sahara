@@ -125,6 +125,26 @@ class PersonTile extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                              if (person.isDemo) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.blueSurfaceTint,
+                                    borderRadius: BorderRadius.circular(AppTheme.radius),
+                                    border: Border.all(color: AppTheme.primaryNavy.withValues(alpha: 0.3)),
+                                  ),
+                                  child: const Text(
+                                    'Demo',
+                                    style: TextStyle(
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.primaryNavy,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -137,19 +157,25 @@ class PersonTile extends StatelessWidget {
                                 height: 7,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: isReachable ? AppTheme.activeGreen : AppTheme.textMuted,
+                                  color: person.isDemo
+                                      ? AppTheme.relayAmber
+                                      : (isReachable ? AppTheme.activeGreen : AppTheme.textMuted),
                                 ),
                               ),
                               const SizedBox(width: 5),
                               Text(
-                                isReachable
-                                    ? '${context.tr('reachable')} • ${person.hops == 1 ? context.tr('hop') : context.tr('hops', {'count': person.hops.toString()})}'
-                                    : '${context.tr('unreachable')} • ${person.lastSeen}',
+                                person.isDemo
+                                    ? 'Sample • ${person.lastKnownLocation}'
+                                    : (isReachable
+                                        ? '${context.tr('reachable')} • ${person.hops == 1 ? context.tr('hop') : context.tr('hops', {'count': person.hops.toString()})}'
+                                        : '${context.tr('unreachable')} • ${person.lastSeen}'),
                                 style: TextStyle(
                                   fontFamily: AppTheme.fontFamily,
                                   fontSize: 12.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: isReachable ? AppTheme.activeGreen : AppTheme.textMuted,
+                                  fontWeight: person.isDemo || isReachable ? FontWeight.w600 : FontWeight.w500,
+                                  color: person.isDemo
+                                      ? AppTheme.textSecondary
+                                      : (isReachable ? AppTheme.activeGreen : AppTheme.textMuted),
                                 ),
                               ),
                             ],

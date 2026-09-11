@@ -21,6 +21,7 @@ class Person {
   final String lastKnownLocation;
   final String? coordinates;
   final String? phoneNumber;
+  final bool isDemo;
 
   const Person({
     required this.id,
@@ -33,6 +34,7 @@ class Person {
     required this.lastKnownLocation,
     this.coordinates,
     this.phoneNumber,
+    this.isDemo = false,
   });
 
   bool get isReachable => status == PersonStatus.reachable;
@@ -59,6 +61,7 @@ class Person {
     String? lastKnownLocation,
     String? coordinates,
     String? phoneNumber,
+    bool? isDemo,
   }) {
     return Person(
       id: id ?? this.id,
@@ -71,6 +74,7 @@ class Person {
       lastKnownLocation: lastKnownLocation ?? this.lastKnownLocation,
       coordinates: coordinates ?? this.coordinates,
       phoneNumber: phoneNumber ?? this.phoneNumber,
+      isDemo: isDemo ?? this.isDemo,
     );
   }
 }

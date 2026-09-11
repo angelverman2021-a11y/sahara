@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/demo_config.dart';
 import '../database/database_helper.dart';
 import '../models/announcement.dart';
 import '../models/mesh_status.dart';
@@ -90,10 +91,24 @@ class SaharaEmergencyService extends EmergencyService {
   MeshStatus get meshStatus => _meshStatus;
 
   @override
-  List<Person> get nearbyPeople => List.unmodifiable(_nearbyPeople);
+  List<Person> get nearbyPeople {
+    if (!DemoConfig.showDemoData) {
+      return List.unmodifiable(_nearbyPeople);
+    }
+    final realIds = _nearbyPeople.map((p) => p.id).toSet();
+    final demoPeers = DemoConfig.demoNearbyPeople.where((d) => !realIds.contains(d.id));
+    return List.unmodifiable([..._nearbyPeople, ...demoPeers]);
+  }
 
   @override
-  List<Person> get familyMembers => List.unmodifiable(_familyMembers);
+  List<Person> get familyMembers {
+    if (!DemoConfig.showDemoData) {
+      return List.unmodifiable(_familyMembers);
+    }
+    final realFamIds = _familyMembers.map((f) => f.id).toSet();
+    final demoFam = DemoConfig.demoFamilyMembers.where((d) => !realFamIds.contains(d.id));
+    return List.unmodifiable([..._familyMembers, ...demoFam]);
+  }
 
   @override
   List<Person> get conversations {
@@ -201,16 +216,24 @@ class SaharaEmergencyService extends EmergencyService {
         );
       }
     }
+    if (DemoConfig.showDemoData) {
+      for (final f in DemoConfig.demoFamilyMembers) {
+        if (f.id == id || f.phoneNumber == id) return f;
+      }
+      for (final p in DemoConfig.demoNearbyPeople) {
+        if (p.id == id || p.phoneNumber == id) return p;
+      }
+    }
     return null;
   }
 
   @override
   List<Person> get allKnownPeople {
     final map = <String, Person>{};
-    for (final p in _familyMembers) {
+    for (final p in familyMembers) {
       map[p.id] = p;
     }
-    for (final p in _nearbyPeople) {
+    for (final p in nearbyPeople) {
       map[p.id] = p;
     }
     return map.values.toList();
@@ -1209,6 +1232,10 @@ class SaharaEmergencyService extends EmergencyService {
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty || _meshService == null) return;
+    if (receiverId.startsWith('demo_')) {
+      debugPrint('[SAHARA-SEND] Skipped mesh dispatch for demo contact: $receiverId');
+      return;
+    }
 
     final person = getPersonById(receiverId);
 
@@ -1372,6 +1399,10 @@ class SaharaEmergencyService extends EmergencyService {
   @override
   void pingPerson(String personId) async {
     if (_meshService == null) return;
+    if (personId.startsWith('demo_')) {
+      debugPrint('[SAHARA-PING] Skipped mesh dispatch for demo contact: $personId');
+      return;
+    }
     final person = getPersonById(personId);
     String targetNodeId = personId;
     if (!targetNodeId.toUpperCase().startsWith('NODE_')) {

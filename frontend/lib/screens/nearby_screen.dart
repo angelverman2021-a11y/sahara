@@ -23,6 +23,23 @@ class _NearbyScreenState extends State<NearbyScreen> {
   }
 
   void _handlePing(BuildContext context, dynamic service, Person peer) {
+    if (peer.isDemo) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Demo contact — radio ping requires an active Bluetooth peer',
+            style: TextStyle(
+              fontFamily: AppTheme.fontFamily,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     service.pingPerson(peer.id);
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -41,6 +58,23 @@ class _NearbyScreenState extends State<NearbyScreen> {
   }
 
   void _handleAddAsFamily(BuildContext context, dynamic service, Person peer) {
+    if (peer.isDemo) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${peer.name} is a sample demo contact',
+            style: const TextStyle(
+              fontFamily: AppTheme.fontFamily,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     service.addPersonToFamily(peer);
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(

@@ -340,19 +340,27 @@ class _FamilyScreenState extends State<FamilyScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: isReachable ? AppTheme.activeGreenLight : AppTheme.surfaceSubtle,
+                        color: person.isDemo
+                            ? AppTheme.surfaceSubtle
+                            : (isReachable ? AppTheme.activeGreenLight : AppTheme.surfaceSubtle),
                         borderRadius: BorderRadius.circular(AppTheme.radius),
                         border: Border.all(
-                          color: isReachable ? AppTheme.activeGreenBorder : AppTheme.surfaceBorder,
+                          color: person.isDemo
+                              ? AppTheme.surfaceBorder
+                              : (isReachable ? AppTheme.activeGreenBorder : AppTheme.surfaceBorder),
                         ),
                       ),
                       child: Text(
-                        isReachable ? 'Reachable' : 'Not reachable',
+                        person.isDemo
+                            ? 'Demo Contact'
+                            : (isReachable ? 'Reachable' : 'Not reachable'),
                         style: TextStyle(
                           fontFamily: AppTheme.fontFamily,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: isReachable ? AppTheme.activeGreen : AppTheme.textMuted,
+                          color: person.isDemo
+                              ? AppTheme.textSecondary
+                              : (isReachable ? AppTheme.activeGreen : AppTheme.textMuted),
                         ),
                       ),
                     ),
@@ -365,7 +373,12 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 _detailRow('Relationship', person.relationLabel),
                 if (person.phoneNumber != null && person.phoneNumber!.isNotEmpty)
                   _detailRow('Phone Number', person.phoneNumber!),
-                _detailRow('Mesh Hops', isReachable ? '${person.hops} hops' : 'Out of mesh range'),
+                _detailRow(
+                  'Mesh Hops',
+                  person.isDemo
+                      ? 'Sample contact (no peer)'
+                      : (isReachable ? '${person.hops} hops' : 'Out of mesh range'),
+                ),
                 _detailRow('Last Known Location', person.lastKnownLocation),
                 if (person.coordinates != null)
                   _detailRow('Coordinates', person.coordinates!),

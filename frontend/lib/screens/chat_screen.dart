@@ -54,6 +54,24 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    if (widget.person.isDemo) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Demo contact — messaging requires an active Bluetooth peer',
+            style: TextStyle(
+              fontFamily: AppTheme.fontFamily,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          backgroundColor: AppTheme.textPrimary,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     service.sendMessage(
       receiverId: widget.person.id,
       content: text,
@@ -98,14 +116,18 @@ class _ChatScreenState extends State<ChatScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              person.isReachable
-                  ? 'Connected • ${person.hops} ${person.hops == 1 ? "hop" : "hops"}'
-                  : 'Unreachable • Stored on mesh',
+              person.isDemo
+                  ? 'Demo Contact • Offline (Presentation Mode)'
+                  : (person.isReachable
+                      ? 'Connected • ${person.hops} ${person.hops == 1 ? "hop" : "hops"}'
+                      : 'Unreachable • Stored on mesh'),
               style: TextStyle(
                 fontFamily: AppTheme.fontFamily,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: person.isReachable ? AppTheme.activeGreen : AppTheme.textMuted,
+                color: person.isDemo
+                    ? AppTheme.relayAmber
+                    : (person.isReachable ? AppTheme.activeGreen : AppTheme.textMuted),
               ),
             ),
           ],

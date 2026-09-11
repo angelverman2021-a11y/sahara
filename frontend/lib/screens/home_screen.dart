@@ -664,6 +664,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
+                      if (person.isDemo) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceSubtle,
+                            borderRadius: BorderRadius.circular(AppTheme.radius),
+                            border: Border.all(color: AppTheme.surfaceBorder),
+                          ),
+                          child: const Text(
+                            'Demo',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -687,6 +707,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 OutlinedButton(
                   onPressed: () {
+                    if (person.isDemo) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Demo contact — radio ping requires an active Bluetooth peer',
+                            style: TextStyle(fontFamily: AppTheme.fontFamily),
+                          ),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: AppTheme.primaryNavy,
+                        ),
+                      );
+                      return;
+                    }
                     service.pingPerson(person.id);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -719,6 +752,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(width: 6),
                   ElevatedButton(
                     onPressed: () {
+                      if (person.isDemo) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${person.name} is a sample demo contact',
+                              style: const TextStyle(fontFamily: AppTheme.fontFamily),
+                            ),
+                            duration: const Duration(seconds: 2),
+                            backgroundColor: AppTheme.primaryNavy,
+                          ),
+                        );
+                        return;
+                      }
                       service.addPersonToFamily(person);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
