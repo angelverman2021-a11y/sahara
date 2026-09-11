@@ -37,6 +37,10 @@ dependencies:
   sqflite: ^2.4.1
   path: ^1.9.1
   nearby_connections: ^4.3.0
+  image_picker: ^1.2.3
+  geolocator: ^14.0.3
+  geocoding: ^5.0.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

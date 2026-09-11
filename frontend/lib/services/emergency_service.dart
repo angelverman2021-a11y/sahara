@@ -31,6 +31,7 @@ abstract class EmergencyService extends ChangeNotifier {
   void pingPerson(String personId);
   int pingFamilyAll();
   void addPersonToFamily(Person person);
+  void addAnnouncement(EmergencyAnnouncement announcement);
   void updateRealBattery(int batteryPercent);
   Future<void> saveUserProfile(UserProfile profile);
   Future<void> setLanguage(String lang);

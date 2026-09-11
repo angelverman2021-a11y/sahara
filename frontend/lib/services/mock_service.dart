@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/announcement.dart';
 import '../models/mesh_status.dart';
 import '../models/message.dart';
@@ -295,13 +296,23 @@ class MockService extends EmergencyService {
 
   Future<void> _initFromNative() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedLang = prefs.getString('user_language');
+      if (savedLang != null && savedLang.isNotEmpty) {
+        _selectedLanguage = savedLang;
+      }
+    } catch (_) {}
+
+    try {
       final realBattery = await NativeBridge.getBatteryLevel();
       _meshStatus = _meshStatus.copyWith(batteryLevel: realBattery);
 
       final profile = await NativeBridge.getProfile();
       if (profile != null) {
         _userProfile = profile;
-        _selectedLanguage = profile.language;
+        if (profile.language.isNotEmpty) {
+          _selectedLanguage = profile.language;
+        }
       }
       notifyListeners();
     } catch (_) {}
@@ -356,6 +367,12 @@ class MockService extends EmergencyService {
 
   @override
   List<EmergencyAnnouncement> get announcements => List.unmodifiable(_announcements);
+
+  @override
+  void addAnnouncement(EmergencyAnnouncement announcement) {
+    _announcements.insert(0, announcement);
+    notifyListeners();
+  }
 
   @override
   UserProfile? get userProfile => _userProfile;
@@ -523,6 +540,10 @@ class MockService extends EmergencyService {
   Future<void> saveUserProfile(UserProfile profile) async {
     _userProfile = profile;
     _selectedLanguage = profile.language;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_language', profile.language);
+    } catch (_) {}
     await NativeBridge.saveProfile(profile);
     notifyListeners();
   }
@@ -530,6 +551,10 @@ class MockService extends EmergencyService {
   @override
   Future<void> setLanguage(String lang) async {
     _selectedLanguage = lang;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_language', lang);
+    } catch (_) {}
     if (_userProfile != null) {
       _userProfile = _userProfile!.copyWith(language: lang);
       await NativeBridge.saveProfile(_userProfile!);

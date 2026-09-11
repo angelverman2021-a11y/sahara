@@ -84,6 +84,8 @@ class _OnboardingCoordinatorState extends State<OnboardingCoordinator> {
         return LanguageScreen(
           initialLanguage: _profile.language,
           onContinue: (language) {
+            final service = EmergencyServiceScope.of(context);
+            service.setLanguage(language);
             setState(() {
               _profile = _profile.copyWith(language: language);
             });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user_profile.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_localizations.dart';
 
 class LanguageScreen extends StatefulWidget {
   final String initialLanguage;
@@ -30,7 +31,7 @@ class _LanguageScreenState extends State<LanguageScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Select your language'),
+        title: Text(context.tr('select_language')),
       ),
       body: SafeArea(
         child: Column(
@@ -41,9 +42,9 @@ class _LanguageScreenState extends State<LanguageScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Language Preference',
-                      style: TextStyle(
+                    Text(
+                      context.tr('language_preference'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -51,9 +52,9 @@ class _LanguageScreenState extends State<LanguageScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Coverage for disaster-prone regions across Assam, Odisha, Bihar, West Bengal, Kerala, Gujarat, and coastal cyclone zones.',
-                      style: TextStyle(
+                    Text(
+                      context.tr('disaster_coverage_desc'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 13,
                         color: AppTheme.textSecondary,
@@ -161,7 +162,7 @@ class _LanguageScreenState extends State<LanguageScreen> {
                 onPressed: () {
                   widget.onContinue(_selectedLanguage);
                 },
-                child: const Text('Continue'),
+                child: Text(context.tr('continue_btn')),
               ),
             ),
           ],

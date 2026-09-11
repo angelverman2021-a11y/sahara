@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 import '../widgets/brand_title.dart';
 import 'nearby_screen.dart';
 
@@ -23,7 +24,7 @@ class _SosScreenState extends State<SosScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text(isSent ? 'Emergency Beacon Active' : 'Emergency SOS'),
+        title: Text(isSent ? context.tr('distress_beacon_active') : context.tr('emergency_sos')),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -61,9 +62,9 @@ class _SosScreenState extends State<SosScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'HIGH PRIORITY DISTRESS ALERT',
-                      style: TextStyle(
+                    Text(
+                      context.tr('emergency_sos'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -99,9 +100,9 @@ class _SosScreenState extends State<SosScreen> {
         ),
         const SizedBox(height: 20),
 
-        const Text(
-          'Send Emergency SOS?',
-          style: TextStyle(
+        Text(
+          context.tr('emergency_sos'),
+          style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -134,25 +135,25 @@ class _SosScreenState extends State<SosScreen> {
               _buildDetailRow(
                 icon: Icons.location_on_outlined,
                 iconColor: AppTheme.activeGreen,
-                label: 'Current Mock Location',
-                value: 'Available (28.5355° N, 77.3910° E)',
-                subValue: 'GPS fix: ±5m accuracy',
+                label: 'Beacon Coordinates',
+                value: 'GPS Active (28.5355° N, 77.3910° E)',
+                subValue: 'Fix accuracy: ±5m',
               ),
               const Divider(height: 20),
               _buildDetailRow(
                 icon: Icons.battery_charging_full_rounded,
                 iconColor: AppTheme.activeGreen,
-                label: 'Battery Level (Real Device)',
+                label: '${context.tr('battery')} Level',
                 value: '${meshStatus.batteryLevel}%',
-                subValue: 'Direct from Android BatteryManager',
+                subValue: 'Direct from device telemetry',
               ),
               const Divider(height: 20),
               _buildDetailRow(
                 icon: Icons.priority_high_rounded,
                 iconColor: AppTheme.emergencyRed,
-                label: 'Emergency Priority',
-                value: 'HIGH',
-                subValue: 'Store-and-forward flooding enabled',
+                label: 'Priority Level',
+                value: 'CRITICAL',
+                subValue: 'Multi-hop peer propagation enabled',
               ),
             ],
           ),
@@ -197,7 +198,7 @@ class _SosScreenState extends State<SosScreen> {
         // Cancel / Back Button
         OutlinedButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel and Return'),
+          child: Text(context.tr('cancel')),
         ),
       ],
     );
@@ -228,13 +229,13 @@ class _SosScreenState extends State<SosScreen> {
                 child: const Icon(Icons.sensors_rounded, color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'SOS SENT',
-                      style: TextStyle(
+                      context.tr('sos_active'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -243,8 +244,8 @@ class _SosScreenState extends State<SosScreen> {
                       ),
                     ),
                     Text(
-                      'Distress beacon actively transmitting to mesh',
-                      style: TextStyle(
+                      context.tr('sos_broadcast_notice'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
@@ -314,7 +315,7 @@ class _SosScreenState extends State<SosScreen> {
               const SizedBox(height: 8),
               _buildLiveStatusRow(
                 dotColor: AppTheme.relayAmber,
-                title: 'Relays',
+                title: context.tr('relays'),
                 value: 'Relays available (4 active)',
               ),
               const SizedBox(height: 8),
@@ -327,7 +328,7 @@ class _SosScreenState extends State<SosScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Battery Level:', style: TextStyle(fontFamily: AppTheme.fontFamily, color: AppTheme.textSecondary, fontSize: 13)),
+                  Text('${context.tr('battery')}:', style: const TextStyle(fontFamily: AppTheme.fontFamily, color: AppTheme.textSecondary, fontSize: 13)),
                   Text('${meshStatus.batteryLevel}%', style: const TextStyle(fontFamily: AppTheme.fontFamily, color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
                 ],
               ),
@@ -353,7 +354,7 @@ class _SosScreenState extends State<SosScreen> {
             );
           },
           icon: const Icon(Icons.people_outline, size: 18),
-          label: const Text('View Nearby Responders'),
+          label: Text(context.tr('nearby_people')),
         ),
         const SizedBox(height: 10),
 
@@ -375,7 +376,7 @@ class _SosScreenState extends State<SosScreen> {
             side: const BorderSide(color: AppTheme.emergencyRedBorder),
           ),
           icon: const Icon(Icons.cancel_outlined, size: 18),
-          label: const Text('Cancel SOS Broadcast'),
+          label: Text(context.tr('cancel_sos')),
         ),
       ],
     );

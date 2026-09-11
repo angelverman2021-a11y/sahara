@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/native_bridge.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
-import '../widgets/app_logo.dart';
+import '../utils/app_localizations.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/emergency_broadcast_feed.dart';
 import '../widgets/feature_card.dart';
@@ -86,10 +86,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const AppLogo(height: 30),
-                  const SizedBox(width: 10),
                   const BrandTitle(
-                    fontSize: 25,
+                    fontSize: 26,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.primaryNavy,
                   ),
@@ -127,9 +125,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 3),
 
               // 2. Subtitle: OFFLINE EMERGENCY MESH NETWORK
-              const Text(
-                'OFFLINE EMERGENCY MESH NETWORK',
-                style: TextStyle(
+              Text(
+                context.tr('tagline'),
+                style: const TextStyle(
                   fontFamily: AppTheme.fontFamily,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -176,9 +174,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 20),
 
               // Section Label: Communication & Contacts
-              const Text(
-                'COMMUNICATION & CONTACTS',
-                style: TextStyle(
+              Text(
+                context.tr('comm_and_contacts'),
+                style: const TextStyle(
                   fontFamily: AppTheme.fontFamily,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -190,8 +188,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
               // 6. Messages
               FeatureCard(
-                title: 'Messages',
-                subtitle: '${service.conversations.length} conversations • Store-and-forward active',
+                title: context.tr('messages'),
+                subtitle: context.tr('conversations_count', {'count': service.conversations.length.toString()}),
                 icon: Icons.chat_bubble_outline_rounded,
                 trailing: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -221,8 +219,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
               // 7. Family
               FeatureCard(
-                title: 'Family',
-                subtitle: '$reachableCount of ${service.familyMembers.length} reachable over mesh',
+                title: context.tr('family'),
+                subtitle: context.tr('family_reachable_count', {
+                  'reachable': reachableCount.toString(),
+                  'total': service.familyMembers.length.toString(),
+                }),
                 icon: Icons.family_restroom_rounded,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -252,10 +253,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 8),
 
-              // 8. Nearby
+              // 8. Nearby People
               FeatureCard(
-                title: 'Nearby',
-                subtitle: '${meshStatus.nearbyCount} mesh peers detected in range',
+                title: context.tr('nearby_people'),
+                subtitle: context.tr('nearby_detected_count', {'count': meshStatus.nearbyCount.toString()}),
                 icon: Icons.radar_rounded,
                 onTap: () {
                   Navigator.push(
@@ -263,40 +264,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     MaterialPageRoute(builder: (_) => const NearbyScreen()),
                   );
                 },
-              ),
-              const SizedBox(height: 18),
-
-              // 9. Small offline/P2P information footer
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceSubtle,
-                  borderRadius: BorderRadius.circular(AppTheme.radius),
-                  border: Border.all(color: AppTheme.surfaceBorder),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.wifi_off_rounded,
-                      size: 14,
-                      color: AppTheme.textMuted,
-                    ),
-                    SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        'Decentralized P2P Mesh • Works without cellular coverage',
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontFamily,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textSecondary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),

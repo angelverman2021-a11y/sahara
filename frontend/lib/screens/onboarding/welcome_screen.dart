@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_localizations.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/brand_title.dart';
 
@@ -23,22 +24,15 @@ class WelcomeScreen extends StatelessWidget {
             children: [
               const Spacer(),
 
-              // Official Sahara Logo
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                    border: Border.all(color: AppTheme.surfaceBorder),
-                  ),
-                  child: const AppLogo(
-                    height: 120,
-                    width: 220,
-                  ),
+              // Official Sahara Logo (Substantially enlarged, sitting directly on background)
+              const Center(
+                child: AppLogo(
+                  height: 150,
+                  width: 280,
+                  fit: BoxFit.contain,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               // Italic Sahara Branding
               const Row(
@@ -124,9 +118,9 @@ class WelcomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppTheme.radius),
                   ),
                 ),
-                child: const Text(
-                  'Get Started',
-                  style: TextStyle(
+                child: Text(
+                  context.tr('get_started'),
+                  style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,

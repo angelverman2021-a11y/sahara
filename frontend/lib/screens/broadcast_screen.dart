@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../models/announcement.dart';
 import '../models/message.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 import '../widgets/brand_title.dart';
 
 class BroadcastScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isSent = false;
   String _lastBroadcastedMessage = '';
+  AnnouncementSeverity _selectedSeverity = AnnouncementSeverity.warning;
 
   final List<String> _suggestions = const [
     'Road blocked near Gate 2.',
@@ -40,7 +43,38 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       return;
     }
 
+    final userProfile = service.userProfile;
+    final senderName = (userProfile?.fullName != null && userProfile!.fullName.isNotEmpty)
+        ? userProfile.fullName
+        : 'You';
+
+    String title;
+    switch (_selectedSeverity) {
+      case AnnouncementSeverity.evacuation:
+        title = 'Evacuation Alert';
+        break;
+      case AnnouncementSeverity.warning:
+        title = 'Emergency Warning';
+        break;
+      case AnnouncementSeverity.advisory:
+        title = 'Advisory Notice';
+        break;
+    }
+
+    // Add to announcements so it immediately appears in the Home feed
+    final newAnnouncement = EmergencyAnnouncement(
+      id: 'ann_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      message: text,
+      source: senderName,
+      timeAgo: 'Just now',
+      severity: _selectedSeverity,
+    );
+    service.addAnnouncement(newAnnouncement);
+
+    // Relayed via mesh P2P service
     service.sendBroadcast(content: text);
+
     setState(() {
       _lastBroadcastedMessage = text;
       _isSent = true;
@@ -56,7 +90,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text(_isSent ? 'Broadcast Relayed' : 'Emergency Broadcast'),
+        title: Text(_isSent ? context.tr('broadcast_sent') : context.tr('emergency_broadcast')),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -77,9 +111,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Emergency Broadcast',
-          style: TextStyle(
+        Text(
+          context.tr('emergency_broadcast'),
+          style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -113,10 +147,63 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         ),
         const SizedBox(height: 18),
 
+        // 1. Required Severity Selector
+        Text(
+          context.tr('broadcast_severity'),
+          style: const TextStyle(
+            fontFamily: AppTheme.fontFamily,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: AppTheme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSeverityOption(
+                context,
+                severity: AnnouncementSeverity.advisory,
+                label: context.tr('severity_advisory'),
+                icon: Icons.info_outline_rounded,
+                activeColor: AppTheme.secondaryBlue,
+                activeBg: AppTheme.blueSurfaceTint,
+                activeBorder: AppTheme.lightBlue,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildSeverityOption(
+                context,
+                severity: AnnouncementSeverity.warning,
+                label: context.tr('severity_warning'),
+                icon: Icons.warning_amber_rounded,
+                activeColor: AppTheme.relayAmber,
+                activeBg: AppTheme.relayAmberLight,
+                activeBorder: AppTheme.relayAmberBorder,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildSeverityOption(
+                context,
+                severity: AnnouncementSeverity.evacuation,
+                label: context.tr('severity_evacuation'),
+                icon: Icons.crisis_alert_rounded,
+                activeColor: AppTheme.emergencyRed,
+                activeBg: AppTheme.emergencyRedLight,
+                activeBorder: AppTheme.emergencyRedBorder,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+
         // Quick suggestions
-        const Text(
-          'QUICK SUGGESTIONS (TAP TO INSERT)',
-          style: TextStyle(
+        Text(
+          context.tr('quick_suggestions'),
+          style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontSize: 11,
             fontWeight: FontWeight.w700,
@@ -156,9 +243,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         const SizedBox(height: 18),
 
         // Text input field
-        const Text(
-          'BROADCAST MESSAGE',
-          style: TextStyle(
+        Text(
+          context.tr('broadcast_message'),
+          style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontSize: 11,
             fontWeight: FontWeight.w700,
@@ -177,8 +264,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             fontSize: 14.5,
             color: AppTheme.textPrimary,
           ),
-          decoration: const InputDecoration(
-            hintText: 'Enter emergency message...',
+          decoration: InputDecoration(
+            hintText: context.tr('enter_broadcast_hint'),
           ),
         ),
         const SizedBox(height: 20),
@@ -187,9 +274,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         ElevatedButton.icon(
           onPressed: () => _handleBroadcast(service),
           icon: const Icon(Icons.campaign_rounded, size: 20),
-          label: const Text(
-            'BROADCAST MESSAGE',
-            style: TextStyle(
+          label: Text(
+            context.tr('broadcast_button'),
+            style: const TextStyle(
               fontFamily: AppTheme.fontFamily,
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -197,7 +284,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             ),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.textPrimary, // Clean navy
+            backgroundColor: _selectedSeverity == AnnouncementSeverity.evacuation
+                ? AppTheme.emergencyRed
+                : AppTheme.textPrimary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
@@ -221,6 +310,62 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ...recentBroadcasts.map((b) => _buildRecentBroadcastCard(b)),
         ],
       ],
+    );
+  }
+
+  Widget _buildSeverityOption(
+    BuildContext context, {
+    required AnnouncementSeverity severity,
+    required String label,
+    required IconData icon,
+    required Color activeColor,
+    required Color activeBg,
+    required Color activeBorder,
+  }) {
+    final isSelected = _selectedSeverity == severity;
+
+    return Material(
+      color: isSelected ? activeBg : AppTheme.surface,
+      borderRadius: BorderRadius.circular(AppTheme.radius),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedSeverity = severity;
+          });
+        },
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.radius),
+            border: Border.all(
+              color: isSelected ? activeBorder : AppTheme.surfaceBorder,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: isSelected ? activeColor : AppTheme.textSecondary,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: AppTheme.fontFamily,
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? activeColor : AppTheme.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -248,9 +393,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'BROADCAST SENT',
-                      style: TextStyle(
+                    Text(
+                      context.tr('broadcast_sent'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -299,9 +444,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatItem('Recipients reached', '8', Icons.group_outlined),
+              _buildStatItem(context.tr('recipients_reached'), '8', Icons.group_outlined),
               Container(width: 1, height: 40, color: AppTheme.surfaceBorder),
-              _buildStatItem('Relays', '4', Icons.hub_outlined),
+              _buildStatItem(context.tr('relays_count'), '4', Icons.hub_outlined),
             ],
           ),
         ),
@@ -318,9 +463,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'MESSAGE CONTENT',
-                style: TextStyle(
+              Text(
+                context.tr('broadcast_message'),
+                style: const TextStyle(
                   fontFamily: AppTheme.fontFamily,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -351,13 +496,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               _isSent = false;
             });
           },
-          child: const Text('Compose Another Broadcast'),
+          child: Text(context.tr('compose_another')),
         ),
         const SizedBox(height: 10),
 
         ElevatedButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Return to Home'),
+          child: Text(context.tr('return_to_home')),
         ),
       ],
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 
 class PersonTile extends StatelessWidget {
   final Person person;
@@ -133,8 +134,8 @@ class PersonTile extends StatelessWidget {
                               const SizedBox(width: 5),
                               Text(
                                 isReachable
-                                    ? 'Reachable • ${person.hops} ${person.hops == 1 ? "hop" : "hops"}'
-                                    : 'Not reachable • ${person.lastSeen}',
+                                    ? '${context.tr('reachable')} • ${person.hops == 1 ? context.tr('hop') : context.tr('hops', {'count': person.hops.toString()})}'
+                                    : '${context.tr('unreachable')} • ${person.lastSeen}',
                                 style: TextStyle(
                                   fontFamily: AppTheme.fontFamily,
                                   fontSize: 12.5,
@@ -152,7 +153,7 @@ class PersonTile extends StatelessWidget {
                       IconButton(
                         icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                         color: AppTheme.textSecondary,
-                        tooltip: 'Message ${person.name}',
+                        tooltip: '${context.tr('message')} ${person.name}',
                         onPressed: onMessageTap,
                       ),
                   ],
@@ -173,9 +174,9 @@ class PersonTile extends StatelessWidget {
                           child: OutlinedButton.icon(
                             onPressed: onPingTap,
                             icon: const Icon(Icons.sensors_rounded, size: 14),
-                            label: const Text(
-                              'Ping myself to them',
-                              style: TextStyle(
+                            label: Text(
+                              context.tr('ping'),
+                              style: const TextStyle(
                                 fontFamily: AppTheme.fontFamily,
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
@@ -197,9 +198,9 @@ class PersonTile extends StatelessWidget {
                           child: OutlinedButton.icon(
                             onPressed: onAddAsFamilyTap,
                             icon: const Icon(Icons.person_add_alt_1_rounded, size: 14),
-                            label: const Text(
-                              'Add as family',
-                              style: TextStyle(
+                            label: Text(
+                              context.tr('add_to_family'),
+                              style: const TextStyle(
                                 fontFamily: AppTheme.fontFamily,
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,

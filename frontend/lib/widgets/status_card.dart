@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/mesh_status.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 
 class StatusCard extends StatelessWidget {
   final MeshStatus status;
@@ -44,7 +45,7 @@ class StatusCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              status.isMeshActive ? 'Mesh Active' : 'Mesh Offline',
+              status.isMeshActive ? context.tr('mesh_active') : context.tr('mesh_inactive'),
               style: const TextStyle(
                 fontFamily: AppTheme.fontFamily,
                 fontSize: 13.5,
@@ -71,7 +72,7 @@ class StatusCard extends StatelessWidget {
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
-                      '${status.nearbyCount} nearby',
+                      '${status.nearbyCount} ${context.tr('peers_nearby')}',
                       style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 13,

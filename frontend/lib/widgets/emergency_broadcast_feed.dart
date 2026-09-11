@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/announcement.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 
 class EmergencyBroadcastFeed extends StatelessWidget {
   final List<EmergencyAnnouncement> announcements;
@@ -29,9 +30,9 @@ class EmergencyBroadcastFeed extends StatelessWidget {
                   color: AppTheme.primaryNavy,
                 ),
                 const SizedBox(width: 6),
-                const Text(
-                  'EMERGENCY BROADCAST',
-                  style: TextStyle(
+                Text(
+                  context.tr('emergency_broadcast').toUpperCase(),
+                  style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
@@ -50,7 +51,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
                   border: Border.all(color: AppTheme.surfaceBorder),
                 ),
                 child: Text(
-                  '${announcements.length} ACTIVE',
+                  context.tr('active_badge', {'count': announcements.length.toString()}),
                   style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontSize: 10,
@@ -72,12 +73,12 @@ class EmergencyBroadcastFeed extends StatelessWidget {
             border: Border.all(color: AppTheme.surfaceBorder),
           ),
           child: announcements.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
+              ? Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Center(
                     child: Text(
-                      'No emergency broadcasts in your sector.',
-                      style: TextStyle(
+                      context.tr('no_broadcasts'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 13,
                         color: AppTheme.textMuted,
@@ -94,7 +95,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
                           thickness: 1,
                           color: AppTheme.surfaceBorder,
                         ),
-                      _buildAnnouncementRow(announcements[i]),
+                      _buildAnnouncementRow(context, announcements[i]),
                     ],
                   ],
                 ),
@@ -105,9 +106,9 @@ class EmergencyBroadcastFeed extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: onSendBroadcast,
           icon: const Icon(Icons.send_rounded, size: 15),
-          label: const Text(
-            'Send emergency broadcast',
-            style: TextStyle(
+          label: Text(
+            context.tr('send_emergency_broadcast'),
+            style: const TextStyle(
               fontFamily: AppTheme.fontFamily,
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
@@ -127,7 +128,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
     );
   }
 
-  Widget _buildAnnouncementRow(EmergencyAnnouncement announcement) {
+  Widget _buildAnnouncementRow(BuildContext context, EmergencyAnnouncement announcement) {
     Color badgeBg;
     Color badgeText;
     Color badgeBorder;
@@ -138,19 +139,19 @@ class EmergencyBroadcastFeed extends StatelessWidget {
         badgeBg = AppTheme.emergencyRedLight;
         badgeText = AppTheme.emergencyRed;
         badgeBorder = AppTheme.emergencyRedBorder;
-        label = 'EVACUATION';
+        label = context.tr('severity_evacuation').toUpperCase();
         break;
       case AnnouncementSeverity.warning:
         badgeBg = AppTheme.relayAmberLight;
         badgeText = AppTheme.relayAmber;
         badgeBorder = AppTheme.relayAmberBorder;
-        label = 'WARNING';
+        label = context.tr('severity_warning').toUpperCase();
         break;
       case AnnouncementSeverity.advisory:
         badgeBg = AppTheme.blueSurfaceTint;
         badgeText = AppTheme.secondaryBlue;
         badgeBorder = AppTheme.lightBlue;
-        label = 'ADVISORY';
+        label = context.tr('severity_advisory').toUpperCase();
         break;
     }
 

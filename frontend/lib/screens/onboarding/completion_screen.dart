@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user_profile.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_localizations.dart';
 import '../../widgets/brand_title.dart';
 
 class CompletionScreen extends StatelessWidget {
@@ -42,9 +43,9 @@ class CompletionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 22),
 
-              const Text(
-                "You're ready.",
-                style: TextStyle(
+              Text(
+                context.tr('profile_complete'),
+                style: const TextStyle(
                   fontFamily: AppTheme.fontFamily,
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
@@ -54,11 +55,11 @@ class CompletionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
 
-              const Text(
-                'Your emergency profile has been created.',
-                style: TextStyle(
+              Text(
+                context.tr('ready_to_connect'),
+                style: const TextStyle(
                   fontFamily: AppTheme.fontFamily,
-                  fontSize: 15,
+                  fontSize: 14.5,
                   color: AppTheme.textSecondary,
                   height: 1.4,
                 ),
@@ -75,13 +76,13 @@ class CompletionScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _summaryRow('Name', profile.fullName.isNotEmpty ? profile.fullName : 'Not specified'),
+                    _summaryRow(context.tr('full_name'), profile.fullName.isNotEmpty ? profile.fullName : 'Not specified'),
                     const Divider(height: 16),
-                    _summaryRow('Contact', profile.phoneNumber.isNotEmpty ? profile.phoneNumber : 'Not specified'),
+                    _summaryRow(context.tr('contact_number'), profile.phoneNumber.isNotEmpty ? profile.phoneNumber : 'Not specified'),
                     const Divider(height: 16),
-                    _summaryRow('Language', profile.language),
+                    _summaryRow(context.tr('language_preference'), profile.language),
                     const Divider(height: 16),
-                    _summaryRow('Emergency Contacts', '${profile.emergencyContacts.length} added'),
+                    _summaryRow(context.tr('emergency_contacts'), '${profile.emergencyContacts.length} added'),
                   ],
                 ),
               ),
@@ -102,9 +103,9 @@ class CompletionScreen extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      'Continue to ',
-                      style: TextStyle(
+                    Text(
+                      '${context.tr('continue_btn')} ',
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,

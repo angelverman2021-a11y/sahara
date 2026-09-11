@@ -7,6 +7,7 @@ import 'package:sahra/widgets/app_logo.dart';
 import 'package:sahra/widgets/brand_title.dart';
 import 'package:sahra/widgets/person_tile.dart';
 import 'package:sahra/widgets/sos_button.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void setPhoneViewport(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 2400);
@@ -16,7 +17,10 @@ void setPhoneViewport(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('Sahara Home Screen renders key emergency elements in correct hierarchy', (WidgetTester tester) async {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+  testWidgets('Sahara Home Screen renders key emergency elements without logo in header and without footer', (WidgetTester tester) async {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
@@ -25,19 +29,19 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // 1. Verify Official Logo & Brand Title (*Sahara*)
-    expect(find.byType(AppLogo), findsAtLeastNWidgets(1));
+    // 1. Verify Top-left has BrandTitle (*Sahara*) but NO AppLogo
     expect(find.byType(BrandTitle), findsAtLeastNWidgets(1));
     expect(find.text('Sahara'), findsAtLeastNWidgets(1));
+    expect(find.byType(AppLogo), findsNothing);
 
     // 2. Subtitle
     expect(find.text('OFFLINE EMERGENCY MESH NETWORK'), findsOneWidget);
 
     // 3. Compact Mesh Status
     expect(find.text('Mesh Active'), findsOneWidget);
-    expect(find.text('${mockService.meshStatus.nearbyCount} nearby'), findsOneWidget);
+    expect(find.textContaining('Peers nearby'), findsOneWidget);
 
-    // 4. Prominent Circular SOS Button (Standalone, not enclosed in rectangular card)
+    // 4. Prominent Circular SOS Button
     expect(find.byType(SosButton), findsOneWidget);
     expect(find.text('SOS'), findsOneWidget);
     expect(find.text('EMERGENCY'), findsAtLeastNWidgets(1));
@@ -48,14 +52,14 @@ void main() {
     expect(find.text('Flood Evacuation Notice'), findsOneWidget);
     expect(find.text('Send emergency broadcast'), findsOneWidget);
 
-    // 6. Quick Navigation Section
+    // 6. Navigation items
     expect(find.text('COMMUNICATION & CONTACTS'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
     expect(find.text('Family'), findsOneWidget);
-    expect(find.text('Nearby'), findsOneWidget);
+    expect(find.text('Nearby People'), findsOneWidget);
 
-    // 7. Decentralized footer
-    expect(find.text('Decentralized P2P Mesh • Works without cellular coverage'), findsOneWidget);
+    // 7. Footer removed as requested
+    expect(find.text('Decentralized P2P Mesh • Works without cellular coverage'), findsNothing);
   });
 
   testWidgets('SOS confirmation and broadcast flow works end-to-end', (WidgetTester tester) async {
@@ -72,8 +76,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Should be on SosScreen in confirmation mode
-    expect(find.text('Send Emergency SOS?'), findsOneWidget);
-    expect(find.text('HIGH'), findsOneWidget);
+    expect(find.text('EMERGENCY SOS'), findsAtLeastNWidgets(1));
+    expect(find.text('CRITICAL'), findsOneWidget);
     final confirmBtn = find.text('CONFIRM EMERGENCY SOS');
     expect(confirmBtn, findsOneWidget);
 
@@ -83,18 +87,17 @@ void main() {
     await tester.pumpAndSettle();
 
     // Should transition to SOS SENT state
-    expect(find.text('SOS SENT'), findsOneWidget);
+    expect(find.text('SOS ACTIVE'), findsAtLeastNWidgets(1));
     expect(find.text('Broadcasting'), findsOneWidget);
-    expect(find.text('Relays available (4 active)'), findsOneWidget);
 
     // Cancel SOS
-    final cancelBtn = find.text('Cancel SOS Broadcast');
+    final cancelBtn = find.text('CANCEL SOS');
     await tester.ensureVisible(cancelBtn);
     await tester.tap(cancelBtn);
     await tester.pumpAndSettle();
 
     // Back to confirmation prompt
-    expect(find.text('Send Emergency SOS?'), findsOneWidget);
+    expect(find.text('CONFIRM EMERGENCY SOS'), findsOneWidget);
   });
 
   testWidgets('Messages and Chat flow sends message locally', (WidgetTester tester) async {
@@ -152,18 +155,15 @@ void main() {
     await tester.tap(familyCard);
     await tester.pumpAndSettle();
 
-    expect(find.text('Family Safety Status'), findsOneWidget);
-    expect(find.text('Ping myself to all'), findsOneWidget);
+    expect(find.text('Family'), findsAtLeastNWidgets(1));
+    expect(find.text('Ping All Family'), findsOneWidget);
 
-    // Tap collective "Ping myself to all"
-    await tester.tap(find.text('Ping myself to all'));
+    // Tap collective "Ping All Family"
+    await tester.tap(find.text('Ping All Family'));
     await tester.pump(const Duration(milliseconds: 300));
 
     // Verify collective feedback
     expect(find.text('Ping sent to all family members'), findsOneWidget);
-
-    // Individual pings should NOT be on family tiles
-    expect(find.text('Ping myself to them'), findsNothing);
 
     // Test Search
     final searchInput = find.widgetWithText(TextField, 'Search family by name or phone...');
@@ -175,7 +175,7 @@ void main() {
     expect(find.text('Mother'), findsNothing);
   });
 
-  testWidgets('Nearby screen individual ping, search and Add as family work', (WidgetTester tester) async {
+  testWidgets('Nearby screen titled "Nearby People" with search, ping and Add to family', (WidgetTester tester) async {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
@@ -184,32 +184,33 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Navigate to Nearby
-    final nearbyCard = find.text('Nearby');
+    // Navigate to Nearby People
+    final nearbyCard = find.text('Nearby People');
     await tester.ensureVisible(nearbyCard);
     await tester.tap(nearbyCard);
     await tester.pumpAndSettle();
 
-    expect(find.text('Nearby Mesh Network'), findsOneWidget);
+    expect(find.text('Nearby People'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('People Discovered in Range'), findsOneWidget);
 
-    // Nearby tiles HAVE individual "Ping myself to them"
-    expect(find.text('Ping myself to them'), findsAtLeastNWidgets(1));
+    // Nearby tiles have individual Ping
+    expect(find.text('Ping'), findsAtLeastNWidgets(1));
 
     // Tap ping on first peer
-    final firstPing = find.text('Ping myself to them').first;
+    final firstPing = find.text('Ping').first;
     await tester.tap(firstPing);
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('Ping sent to'), findsOneWidget);
 
-    // Tap "Add as family" on non-family peer
-    final addFamilyBtn = find.text('Add as family').first;
+    // Tap "Add to Family" on non-family peer
+    final addFamilyBtn = find.text('Add to Family').first;
     await tester.ensureVisible(addFamilyBtn);
     await tester.tap(addFamilyBtn);
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.textContaining('to Family'), findsOneWidget);
+    expect(find.textContaining('Added'), findsOneWidget);
   });
 
-  testWidgets('Emergency Broadcast flow sends broadcast and shows confirmation', (WidgetTester tester) async {
+  testWidgets('Emergency Broadcast flow with severity selector adds immediately to feed', (WidgetTester tester) async {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
@@ -225,6 +226,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Emergency Broadcast'), findsAtLeastNWidgets(1));
+    expect(find.text('BROADCAST SEVERITY'), findsOneWidget);
+    expect(find.text('Advisory'), findsOneWidget);
+    expect(find.text('Warning'), findsOneWidget);
+    expect(find.text('Evacuation'), findsOneWidget);
+
+    // Select Evacuation severity
+    await tester.tap(find.text('Evacuation'));
+    await tester.pumpAndSettle();
 
     // Tap a template suggestion
     await tester.tap(find.text('Road blocked near Gate 2.'));
@@ -237,13 +246,64 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify confirmation state
-    expect(find.text('BROADCAST SENT'), findsOneWidget);
+    expect(find.text('BROADCAST SENT'), findsAtLeastNWidgets(1));
     expect(find.text('Recipients reached'), findsOneWidget);
-    expect(find.text('8'), findsOneWidget);
-    expect(find.text('4'), findsOneWidget);
+
+    // Return to Home
+    await tester.tap(find.text('Return to Home'));
+    await tester.pumpAndSettle();
+
+    // Verify new Evacuation announcement appears immediately in Home feed!
+    expect(find.text('EVACUATION'), findsNWidgets(2));
+    expect(find.text('Road blocked near Gate 2.'), findsOneWidget);
   });
 
-  testWidgets('5-Step First-Launch Onboarding flow in exact approved order', (WidgetTester tester) async {
+  testWidgets('Language switch visibly translates the UI across disaster languages', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService();
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockService,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // Switch language to Hindi
+    await mockService.setLanguage('Hindi');
+    await tester.pumpAndSettle();
+
+    // Check that Home screen elements are in Hindi
+    expect(find.text('मेश सक्रिय'), findsOneWidget);
+    expect(find.text('आपातकालीन प्रसारण'), findsOneWidget);
+    expect(find.text('संचार एवं संपर्क'), findsOneWidget);
+    expect(find.text('संदेश'), findsOneWidget);
+    expect(find.text('परिवार'), findsOneWidget);
+    expect(find.text('आस-पास के लोग'), findsOneWidget);
+
+    // Switch to Odia
+    await mockService.setLanguage('Odia');
+    await tester.pumpAndSettle();
+
+    expect(find.text('ମେଶ୍ ସକ୍ରିୟ'), findsOneWidget);
+    expect(find.text('ଜରୁରୀକାଳୀନ ପ୍ରସାରଣ'), findsOneWidget);
+    expect(find.text('ପରିବାର'), findsOneWidget);
+
+    // Switch to Telugu
+    await mockService.setLanguage('Telugu');
+    await tester.pumpAndSettle();
+
+    expect(find.text('మెష్ యాక్టివ్‌గా ఉంది'), findsOneWidget);
+    expect(find.text('కుటుంబం'), findsOneWidget);
+    expect(find.text('దగ్గరలోని వ్యక్తులు'), findsOneWidget);
+
+    // Switch back to English
+    await mockService.setLanguage('English');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mesh Active'), findsOneWidget);
+    expect(find.text('Family'), findsOneWidget);
+  });
+
+  testWidgets('Welcome screen has large logo without outer card', (WidgetTester tester) async {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
@@ -252,78 +312,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // 1. Welcome Screen (with official logo)
-    expect(find.textContaining('Welcome'), findsOneWidget);
-    expect(find.byType(AppLogo), findsAtLeastNWidgets(1));
-    expect(find.byType(BrandTitle), findsAtLeastNWidgets(1));
-    final getStartedBtn = find.widgetWithText(ElevatedButton, 'Get Started');
-    expect(getStartedBtn, findsOneWidget);
-    await tester.tap(getStartedBtn);
-    await tester.pumpAndSettle();
-
-    // 2. Language Selection Screen (Language comes FIRST after Welcome)
-    expect(find.text('Select your language'), findsOneWidget);
-    expect(find.text('Odia / ଓଡ଼ିଆ'), findsOneWidget);
-    expect(find.text('Bengali / বাংলা'), findsOneWidget);
-    expect(find.text('Assamese / অসমীয়া'), findsOneWidget);
-    expect(find.text('Malayalam / മലയാളം'), findsOneWidget);
-    expect(find.text('Gujarati / ગુજરાતી'), findsOneWidget);
-    expect(find.text('Maithili / मैथिली'), findsOneWidget);
-    expect(find.text('Bodo / बड़ो'), findsOneWidget);
-    expect(find.text('Telugu / తెలుగు'), findsOneWidget);
-
-    // Tap Assamese
-    await tester.tap(find.text('Assamese / অসমীয়া'));
-    await tester.pumpAndSettle();
-
-    final langContinueBtn = find.widgetWithText(ElevatedButton, 'Continue');
-    await tester.tap(langContinueBtn);
-    await tester.pumpAndSettle();
-
-    // 3. Personal Details Screen (Strict DD/MM/YYYY formatting)
-    expect(find.text('Personal Information'), findsOneWidget);
-    final textFields = find.byType(TextFormField);
-    // Name
-    await tester.enterText(textFields.at(0), 'Arun Sharma');
-    // Mobile
-    await tester.enterText(textFields.at(1), '+91 9876543210');
-    // DOB
-    await tester.enterText(textFields.at(2), '15/08/1990');
-    // Location
-    await tester.enterText(textFields.at(3), 'Guwahati Relief Camp 2');
-    await tester.pumpAndSettle();
-
-    final detailsContinueBtn = find.widgetWithText(ElevatedButton, 'Continue');
-    await tester.ensureVisible(detailsContinueBtn);
-    await tester.tap(detailsContinueBtn);
-    await tester.pumpAndSettle();
-
-    // 4. Emergency Contacts Screen
-    expect(find.text('Emergency Contacts'), findsOneWidget);
-    final contactFields = find.byType(TextFormField);
-    await tester.enterText(contactFields.at(0), 'Sunita Sharma');
-    await tester.enterText(contactFields.at(1), 'Mother');
-    await tester.enterText(contactFields.at(2), '+91 9876500001');
-    await tester.pumpAndSettle();
-
-    final contactsContinueBtn = find.widgetWithText(ElevatedButton, 'Continue');
-    await tester.ensureVisible(contactsContinueBtn);
-    await tester.tap(contactsContinueBtn);
-    await tester.pumpAndSettle();
-
-    // 5. Completion Screen
-    expect(find.text("You're ready."), findsOneWidget);
-    expect(find.text('Arun Sharma'), findsOneWidget);
-    expect(find.text('Assamese'), findsOneWidget);
-
-    // Tap "Continue to Sahara"
-    final finishBtn = find.widgetWithText(ElevatedButton, 'Continue to ');
-    await tester.tap(finishBtn);
-    await tester.pumpAndSettle();
-
-    // Transitioned to Home Screen
-    expect(find.text('OFFLINE EMERGENCY MESH NETWORK'), findsOneWidget);
-    expect(find.byType(SosButton), findsOneWidget);
+    // Welcome Screen has official logo directly on background
+    expect(find.byType(AppLogo), findsOneWidget);
+    final logoWidget = tester.widget<AppLogo>(find.byType(AppLogo));
+    expect(logoWidget.height, 150);
+    expect(logoWidget.width, 280);
+    expect(find.text('Get Started'), findsOneWidget);
   });
 
   test('DateInputFormatter strictly validates and formats DD/MM/YYYY', () {

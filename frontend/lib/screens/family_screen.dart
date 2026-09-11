@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/person.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 import '../widgets/person_tile.dart';
 import 'chat_screen.dart';
 
@@ -51,9 +52,9 @@ class _FamilyScreenState extends State<FamilyScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radius),
           ),
-          title: const Text(
-            'Add as family',
-            style: TextStyle(
+          title: Text(
+            context.tr('add_to_family'),
+            style: const TextStyle(
               fontFamily: AppTheme.fontFamily,
               fontWeight: FontWeight.w700,
               fontSize: 18,
@@ -66,8 +67,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
               TextField(
                 controller: nameController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
+                decoration: InputDecoration(
+                  labelText: context.tr('full_name'),
                   hintText: 'e.g. Ramesh Sharma',
                 ),
               ),
@@ -75,8 +76,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
               TextField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
+                decoration: InputDecoration(
+                  labelText: context.tr('phone_number'),
                   hintText: 'e.g. +91 98100 12345',
                 ),
               ),
@@ -85,7 +86,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text(context.tr('cancel')),
             ),
             ElevatedButton(
               onPressed: () {
@@ -100,21 +101,26 @@ class _FamilyScreenState extends State<FamilyScreen> {
                     status: PersonStatus.reachable,
                     hops: 1,
                     lastSeen: 'Just now',
-                    locationAvailable: false,
-                    lastKnownLocation: 'Nearby Mesh',
+                    locationAvailable: true,
+                    lastKnownLocation: 'Discovered in mesh range',
                   );
                   service.addPersonToFamily(newPerson);
                   Navigator.pop(dialogContext);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Added $name to Family'),
-                      duration: const Duration(seconds: 2),
+                      content: Text(
+                        context.tr('added_to_family', {'name': name}),
+                        style: const TextStyle(
+                          fontFamily: AppTheme.fontFamily,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      backgroundColor: AppTheme.primaryNavy,
                     ),
                   );
-                  setState(() {});
                 }
               },
-              child: const Text('Add to Family'),
+              child: Text(context.tr('save')),
             ),
           ],
         );
@@ -140,11 +146,11 @@ class _FamilyScreenState extends State<FamilyScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Family Safety Status'),
+        title: Text(context.tr('family')),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add_alt_1_rounded),
-            tooltip: 'Add as family',
+            tooltip: context.tr('add_to_family'),
             onPressed: () => _showAddFamilyDialog(context, service),
           ),
         ],
@@ -221,9 +227,9 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => _handleCollectivePing(context, service),
                   icon: const Icon(Icons.sensors_rounded, size: 18),
-                  label: const Text(
-                    'Ping myself to all',
-                    style: TextStyle(
+                  label: Text(
+                    context.tr('ping_all_family'),
+                    style: const TextStyle(
                       fontFamily: AppTheme.fontFamily,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,

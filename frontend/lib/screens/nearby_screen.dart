@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/person.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 import '../widgets/person_tile.dart';
 import 'chat_screen.dart';
 
@@ -27,7 +28,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Ping sent to ${peer.name}',
+          context.tr('ping_sent_to', {'name': peer.name}),
           style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontWeight: FontWeight.w600,
@@ -45,7 +46,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Added ${peer.name} to Family',
+          context.tr('added_to_family', {'name': peer.name}),
           style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontWeight: FontWeight.w600,
@@ -76,7 +77,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Nearby Mesh Network'),
+        title: Text(context.tr('nearby_people')),
       ),
       body: SafeArea(
         child: Column(
@@ -88,7 +89,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search nearby by name, phone or location...',
+                  hintText: context.tr('search_nearby_hint'),
                   prefixIcon: const Icon(Icons.search_rounded, size: 18),
                   suffixIcon: query.isNotEmpty
                       ? IconButton(
@@ -113,7 +114,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
             ),
             const Divider(height: 1),
 
-            // Mesh Topology Info
+            // Discovered People Info
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
@@ -121,14 +122,14 @@ class _NearbyScreenState extends State<NearbyScreen> {
               child: Row(
                 children: [
                   const Icon(
-                    Icons.radar_rounded,
+                    Icons.people_outline_rounded,
                     color: AppTheme.primaryNavy,
                     size: 17,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${nearbyPeople.length} Devices Discovered in Local Mesh Range',
+                      context.tr('people_in_range', {'count': nearbyPeople.length.toString()}),
                       style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 12.5,
@@ -156,7 +157,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'No nearby peers matching "$query"',
+                            context.tr('no_peers_found', {'query': query}),
                             style: const TextStyle(
                               fontFamily: AppTheme.fontFamily,
                               fontSize: 14,
@@ -192,9 +193,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                               ),
                             );
                           },
-                          // Individual ping retained for nearby peers
                           onPingTap: () => _handlePing(context, service, peer),
-                          // Add as family button if not yet family
                           onAddAsFamilyTap: isAlreadyFamily
                               ? null
                               : () => _handleAddAsFamily(context, service, peer),

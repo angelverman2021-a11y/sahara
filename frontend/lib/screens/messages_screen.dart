@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/person.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localizations.dart';
 import 'chat_screen.dart';
 
 class MessagesScreen extends StatelessWidget {
@@ -15,7 +16,7 @@ class MessagesScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Emergency Messages'),
+        title: Text(context.tr('emergency_messages')),
       ),
       body: SafeArea(
         child: Column(
@@ -25,14 +26,14 @@ class MessagesScreen extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: AppTheme.surfaceSubtle,
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.hub_outlined, size: 16, color: AppTheme.activeGreen),
-                  SizedBox(width: 8),
+                  const Icon(Icons.hub_outlined, size: 16, color: AppTheme.activeGreen),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'P2P store-and-forward mesh routing active • Offline',
-                      style: TextStyle(
+                      context.tr('p2p_notice'),
+                      style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,

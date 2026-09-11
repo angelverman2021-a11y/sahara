@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user_profile.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_localizations.dart';
 
 class EmergencyContactsScreen extends StatefulWidget {
   final List<EmergencyContact> initialContacts;
@@ -89,7 +90,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Emergency contacts'),
+        title: Text(context.tr('emergency_contacts')),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -99,9 +100,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Emergency Contacts',
-                  style: TextStyle(
+                Text(
+                  context.tr('add_trusted_contacts'),
+                  style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -109,9 +110,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'These are trusted individuals to reach or notify during a disaster emergency.',
-                  style: TextStyle(
+                Text(
+                  context.tr('contacts_desc'),
+                  style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontSize: 13,
                     color: AppTheme.textSecondary,
@@ -141,7 +142,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Contact ${index + 1}',
+                                '${context.tr('emergency_contacts')} ${index + 1}',
                                 style: const TextStyle(
                                   fontFamily: AppTheme.fontFamily,
                                   fontSize: 13.5,
@@ -163,9 +164,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                           const SizedBox(height: 10),
 
                           // Contact Name
-                          const Text(
-                            'Name',
-                            style: TextStyle(
+                          Text(
+                            context.tr('contact_name'),
+                            style: const TextStyle(
                               fontFamily: AppTheme.fontFamily,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
@@ -184,9 +185,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                           const SizedBox(height: 10),
 
                           // Relationship
-                          const Text(
-                            'Relationship',
-                            style: TextStyle(
+                          Text(
+                            context.tr('relationship'),
+                            style: const TextStyle(
                               fontFamily: AppTheme.fontFamily,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
@@ -205,9 +206,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                           const SizedBox(height: 10),
 
                           // Phone Number
-                          const Text(
-                            'Phone number',
-                            style: TextStyle(
+                          Text(
+                            context.tr('phone_number'),
+                            style: const TextStyle(
                               fontFamily: AppTheme.fontFamily,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
@@ -234,7 +235,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 OutlinedButton.icon(
                   onPressed: _addContact,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add another contact'),
+                  label: Text(context.tr('add_contact')),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.textPrimary,
                     side: const BorderSide(color: AppTheme.surfaceBorderStrong),
@@ -245,7 +246,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 // Continue Button
                 ElevatedButton(
                   onPressed: _submit,
-                  child: const Text('Continue'),
+                  child: Text(context.tr('continue_btn')),
                 ),
                 const SizedBox(height: 16),
               ],
