@@ -1,11 +1,51 @@
-message_id,category,priority,content,suggested_action
-EM001,SOS,Highest,URGENT: Family trapped on roof due to rising water level. 4 members including infant.,Immediate boat rescue required
-EM002,SOS,Highest,Medical emergency: Severe fracture and elderly diabetic person needs insulin.,Dispatch medical rescue team
-EM003,EMERGENCY,High,Main bridge connecting Block B to Highway 31 submerged. Do not cross.,Take eastern detour via Ridge Road
-EM004,EMERGENCY,High,Cyclone landfall expected in 2 hours. Move away from tin roofs to concrete shelter.,Relocate to primary school shelter
-EM005,BROADCAST,High,Relief camp operational at Community Center Ward 4 with drinking water and food.,Direct displaced persons to camp
-EM006,BROADCAST,High,High-voltage electrical pole collapsed on Railway Crossing Road. Electrocution hazard.,Avoid railway crossing corridor
-EM007,FAMILY,Medium,I am safe at cyclone shelter 3. Looking for Rahul and Ananya.,Check shelter registry desk
-EM008,FAMILY,Medium,Moved to Panchayat Bhavan upper floor. Water at 5 feet on ground.,Stay in place until water recedes
-EM009,STATUS,Low,Mobile towers down in sector 9. Running on battery saver.,Conserve device battery
-EM010,STATUS,Low,Rain stopped in north zone. Water draining slowly towards canal.,Monitor water gauges
+message_id,message_type,priority,message
+M001,SOS,Highest,"I am trapped in a flooded area"
+M002,EMERGENCY,High,"Water level rising near the village"
+M003,FAMILY,High,"Mother, I am safe. I am near the school."
+M004,BROADCAST,High,"Avoid the main road. It is flooded."
+M005,STATUS,Normal,"I am safe and waiting at the shelter."
+M006,SOS,Highest,"Elderly man having severe chest pain at House 45, River Street. Need immediate medical help."
+M007,SOS,Highest,"Roof collapsed in storm, three people buried under debris near Old Mill Road."
+M008,SOS,Highest,"Water level reaching 2nd floor, cannot open door, trapped inside!"
+M009,SOS,Highest,"Pregnant woman in active labor at Community Center. No power or transport available."
+M010,SOS,Highest,"Boat capsized near North Bridge. 4 people clinging to trees in swift current."
+M011,SOS,Highest,"Child injured by fallen timber, bleeding heavily. Need urgent paramedic support."
+M012,SOS,Highest,"Smoke filling apartment on 3rd floor, stairwell blocked by debris."
+M013,SOS,Highest,"Asthma attack, inhaler ran out. Severe breathing difficulty at Block B shelter."
+M014,SOS,Highest,"Flash flood swept away ground floor wall. Trapped on rooftop with 5 neighbors."
+M015,EMERGENCY,High,"Water level rising rapidly near the village dike. Spillway overflowing."
+M016,EMERGENCY,High,"Main power transformer sparks and downed live wires on West Avenue."
+M017,EMERGENCY,High,"Landslide blocking main evacuation highway near Mile 14. Vehicles trapped."
+M018,EMERGENCY,High,"Gas leak odor strong near Central Market area. Avoid ignition sources."
+M019,EMERGENCY,High,"Bridge on East River showing structural cracks. Do not cross."
+M020,EMERGENCY,High,"Storm surge breaking sea wall near Fisherman Colony."
+M021,EMERGENCY,High,"Drinking water pump station submerged. Water supply contaminated."
+M022,EMERGENCY,High,"Tree fell on high-voltage power line near City Hospital emergency entrance."
+M023,EMERGENCY,High,"Sub-station flood alarm triggered. Area power grid cutoff imminent."
+M024,EMERGENCY,High,"Fuel station wall collapsed, potential chemical spill in Sector 9."
+M025,FAMILY,High,"Dad, we evacuated to St. Mary High School shelter. All of us are uninjured."
+M026,FAMILY,Normal,"Priya, reached the relief camp. Kids are sleeping. Call when signal returns."
+M027,FAMILY,High,"Searching for Uncle Ramesh. Last seen near Railway Colony during evacuation."
+M028,FAMILY,Normal,"Aunt Sunita, we have clean drinking water and blankets at the stadium."
+M029,FAMILY,High,"Grandma is safe with us at the municipal gym. Doctor checked her blood pressure."
+M030,FAMILY,Normal,"Ankit, stayed back at house upper deck. House is dry. Will text again at noon."
+M031,FAMILY,High,"Looking for my brother Vikrant, red jacket, last seen near West Bus Stand."
+M032,FAMILY,Normal,"Wife and baby safe at Sector 3 Relief Depot. Don't risk travelling."
+M033,FAMILY,Normal,"Grandpa's medication secured. We are heading to the North relief hub."
+M034,BROADCAST,Highest,"EVACUATION ORDER: All residents of Low-Lying River Banks move to Central Stadium immediately."
+M035,BROADCAST,High,"Clean drinking water and warm food packets being distributed at Town Hall."
+M036,BROADCAST,High,"Medical response unit deployed at Sector 5 Elementary School."
+M037,BROADCAST,High,"Boil water advisory in effect for North District due to flood runoff."
+M038,BROADCAST,High,"Emergency Mesh Node activated at High School Tower. Send messages via SAHARA."
+M039,BROADCAST,Highest,"Cyclone landfall expected in 2 hours. Stay indoors away from windows."
+M040,BROADCAST,High,"Relief helicopters operating near East Field for air-drop supplies."
+M041,BROADCAST,Normal,"Volunteers needed for food packaging at Central Community Kitchen."
+M042,BROADCAST,High,"Road to District Hospital cleared for emergency vehicles only."
+M043,STATUS,Normal,"Shelter 4 has reached capacity. Redirection to Shelter 5 in progress."
+M044,STATUS,Low,"Solar charging station operating at 80% at Relief Camp B."
+M045,STATUS,Normal,"Water level receding on Main Street, but mud accumulation heavy."
+M046,STATUS,Low,"Mobile mesh bridge battery level at 75%. Relay operational."
+M047,STATUS,Normal,"First aid kit delivered to Community Center Room 102."
+M048,STATUS,Low,"Group of 15 evacuees resting at High School Auditorium."
+M049,STATUS,Normal,"Generator power restored for emergency lighting at Sector 2 Camp."
+M050,STATUS,Low,"Rain stopped in North Zone. Wind speeds lowering."
