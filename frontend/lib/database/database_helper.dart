@@ -1,29 +1,31 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-import 'message_model.dart';
+import '../models/message_model.dart';
 
-/// A singleton helper class that manages the local SQLite database for
-/// the disaster management chat application.
+/// A singleton helper class that manages the local SQLite database for SAHARA.
 ///
-/// Uses the `sqflite` package to open, create, and operate on a persistent
-/// database file named `offline_messages.db` in the device's default
-/// database directory.
+/// Stores [MessagePacket] instances natively with physical mesh routing IDs,
+/// hop-count TTL, epoch millisecond timestamps, and persistent crash-safe
+/// deduplication state via the `seen_messages` table.
 ///
 /// ## Usage
 /// ```dart
 /// final db = DatabaseHelper.instance;
-/// await db.insertMessage(message);
+/// await db.insertMessage(messagePacket);
 /// final all = await db.getAllMessages();
+/// final hasSeen = await db.hasSeenMessage(messagePacket.messageId);
 /// ```
 class DatabaseHelper {
   // ---------------------------------------------------------------------------
-  // Singleton boilerplate
+  // Database Configuration & Tables
   // ---------------------------------------------------------------------------
 
-  static const String _dbName    = 'offline_messages.db';
-  static const int    _dbVersion = 1;
-  static const String _tableName = 'messages';
+  static const String _dbName = 'offline_messages.db';
+  static const int _dbVersion = 1;
+
+  static const String _messagesTable = 'messages';
+  static const String _seenMessagesTable = 'seen_messages';
 
   /// The single shared instance of [DatabaseHelper].
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -35,7 +37,7 @@ class DatabaseHelper {
   Database? _db;
 
   // ---------------------------------------------------------------------------
-  // Database access point
+  // Database Access Point
   // ---------------------------------------------------------------------------
 
   /// Returns the open [Database] instance, initialising it if necessary.
@@ -45,15 +47,12 @@ class DatabaseHelper {
   }
 
   // ---------------------------------------------------------------------------
-  // Initialisation
+  // Initialisation & Schema Setup
   // ---------------------------------------------------------------------------
 
   /// Opens (or creates) the SQLite database file on the device.
   Future<Database> _initDB() async {
-    // Resolve the platform-specific default database directory.
     final dbPath = await getDatabasesPath();
-
-    // Build the full absolute path, e.g. /data/user/0/<app>/databases/offline_messages.db
     final path = join(dbPath, _dbName);
 
     return openDatabase(
@@ -66,131 +65,172 @@ class DatabaseHelper {
 
   /// Called the first time the database file is created.
   ///
-  /// Creates the `messages` table with columns matching every field of
-  /// [MessageModel]. `message_id` is the PRIMARY KEY.
+  /// Sets up:
+  /// 1. `messages`: Stores [MessagePacket] with physical node IDs and hop-count TTL.
+  /// 2. `seen_messages`: Stores seen message IDs for persistent deduplication.
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE $_tableName (
-        message_id  TEXT    PRIMARY KEY NOT NULL,
-        sender_id   TEXT    NOT NULL,
-        receiver_id TEXT    NOT NULL,
-        type        TEXT    NOT NULL,
-        priority    TEXT    NOT NULL,
-        content     TEXT    NOT NULL,
-        timestamp   TEXT    NOT NULL,
-        ttl         INTEGER NOT NULL DEFAULT 0,
-        status      TEXT    NOT NULL DEFAULT 'sent'
+      CREATE TABLE $_messagesTable (
+        message_id       TEXT    PRIMARY KEY NOT NULL,
+        sender_id        TEXT    NOT NULL,
+        receiver_id      TEXT    NOT NULL,
+        sender_node_id   TEXT    NOT NULL,
+        receiver_node_id TEXT    NOT NULL,
+        type             TEXT    NOT NULL,
+        priority         TEXT    NOT NULL,
+        content          TEXT    NOT NULL,
+        timestamp        INTEGER NOT NULL,
+        ttl              INTEGER NOT NULL,
+        status           TEXT    NOT NULL DEFAULT 'PENDING'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE $_seenMessagesTable (
+        message_id TEXT    PRIMARY KEY NOT NULL,
+        seen_at    INTEGER NOT NULL
       )
     ''');
   }
 
   /// Called when [_dbVersion] is bumped in a future release.
-  ///
-  /// Extend this method with ALTER TABLE statements as the schema evolves.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Reserved for future schema migrations.
-    // Example:
-    //   if (oldVersion < 2) {
-    //     await db.execute('ALTER TABLE $_tableName ADD COLUMN read_at TEXT');
-    //   }
   }
 
   // ---------------------------------------------------------------------------
-  // CRUD operations
+  // Message CRUD Operations (MessagePacket)
   // ---------------------------------------------------------------------------
 
-  /// Inserts [message] into the database.
+  /// Inserts or replaces [message] in the database.
   ///
-  /// If a row with the same `message_id` already exists, it is replaced
-  /// entirely (`ConflictAlgorithm.replace`).
-  ///
-  /// Returns the row ID of the newly inserted row.
-  Future<int> insertMessage(MessageModel message) async {
+  /// Uses [MessagePacket.toJson] for strict 1:1 column mapping.
+  /// Returns the row ID of the newly inserted or updated row.
+  Future<int> insertMessage(MessagePacket message) async {
     final db = await database;
     return db.insert(
-      _tableName,
-      message.toMap(),
+      _messagesTable,
+      message.toJson(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  /// Returns every message row in the table as a list of [MessageModel].
+  /// Returns every message row in the table as a list of [MessagePacket].
   ///
   /// Rows are ordered by [timestamp] ascending (oldest first).
-  Future<List<MessageModel>> getAllMessages() async {
-    final db   = await database;
-    final rows = await db.query(_tableName, orderBy: 'timestamp ASC');
-    return rows.map(MessageModel.fromMap).toList();
+  Future<List<MessagePacket>> getAllMessages() async {
+    final db = await database;
+    final rows = await db.query(_messagesTable, orderBy: 'timestamp ASC');
+    return rows.map((row) => MessagePacket.fromJson(row)).toList();
   }
 
-  /// Returns the single [MessageModel] matching [messageId], or `null` if
-  /// no such row exists.
-  Future<MessageModel?> getMessageById(String messageId) async {
-    final db   = await database;
+  /// Returns the single [MessagePacket] matching [messageId], or `null` if none found.
+  Future<MessagePacket?> getMessageById(String messageId) async {
+    final db = await database;
     final rows = await db.query(
-      _tableName,
-      where:     'message_id = ?',
+      _messagesTable,
+      where: 'message_id = ?',
       whereArgs: [messageId],
-      limit:     1,
+      limit: 1,
     );
     if (rows.isEmpty) return null;
-    return MessageModel.fromMap(rows.first);
+    return MessagePacket.fromJson(rows.first);
   }
 
-  /// Returns all messages whose [status] matches the given value.
-  ///
-  /// Example: `await db.getMessagesByStatus('pending')`
-  Future<List<MessageModel>> getMessagesByStatus(String status) async {
-    final db   = await database;
+  /// Returns all messages whose [status] matches the given value (e.g. 'PENDING', 'DELIVERED').
+  Future<List<MessagePacket>> getMessagesByStatus(String status) async {
+    final db = await database;
     final rows = await db.query(
-      _tableName,
-      where:     'status = ?',
+      _messagesTable,
+      where: 'status = ?',
       whereArgs: [status],
-      orderBy:   'timestamp ASC',
+      orderBy: 'timestamp ASC',
     );
-    return rows.map(MessageModel.fromMap).toList();
+    return rows.map((row) => MessagePacket.fromJson(row)).toList();
   }
 
   /// Updates the [status] field of the message identified by [messageId].
   ///
-  /// Returns the number of rows affected (0 if no match was found).
+  /// Returns the number of rows affected.
   Future<int> updateMessageStatus(String messageId, String status) async {
     final db = await database;
     return db.update(
-      _tableName,
+      _messagesTable,
       {'status': status},
-      where:     'message_id = ?',
+      where: 'message_id = ?',
       whereArgs: [messageId],
     );
   }
 
   /// Deletes the message identified by [messageId].
   ///
-  /// Returns the number of rows deleted (0 if no match was found).
+  /// Returns the number of rows deleted.
   Future<int> deleteMessage(String messageId) async {
     final db = await database;
     return db.delete(
-      _tableName,
-      where:     'message_id = ?',
+      _messagesTable,
+      where: 'message_id = ?',
       whereArgs: [messageId],
     );
   }
 
-  /// Deletes all messages whose TTL has expired relative to [nowEpochSeconds].
-  ///
-  /// A message is considered expired when:
-  ///   `(unix_epoch_of_timestamp + ttl) < nowEpochSeconds`
+  // ---------------------------------------------------------------------------
+  // Persistent Deduplication Storage (seen_messages)
+  // ---------------------------------------------------------------------------
+
+  /// Marks a [messageId] as seen in SQLite for crash-safe deduplication.
+  Future<void> markMessageSeen(String messageId, [int? seenAt]) async {
+    final db = await database;
+    final timestamp = seenAt ?? DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      _seenMessagesTable,
+      {
+        'message_id': messageId,
+        'seen_at': timestamp,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Checks if [messageId] has already been seen.
+  Future<bool> hasSeenMessage(String messageId) async {
+    final db = await database;
+    final rows = await db.query(
+      _seenMessagesTable,
+      columns: ['message_id'],
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Removes a [messageId] from the seen cache table.
   ///
   /// Returns the number of rows deleted.
-  Future<int> deleteExpiredMessages(int nowEpochSeconds) async {
+  Future<int> removeSeenMessage(String messageId) async {
     final db = await database;
-    // timestamp is stored as ISO 8601; use SQLite's strftime to convert.
-    return db.rawDelete(
-      '''
-      DELETE FROM $_tableName
-      WHERE (strftime('%s', timestamp) + ttl) < ?
-      ''',
-      [nowEpochSeconds],
+    return db.delete(
+      _seenMessagesTable,
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  /// Returns all persisted seen message IDs.
+  Future<List<String>> getAllSeenMessageIds() async {
+    final db = await database;
+    final rows = await db.query(_seenMessagesTable, columns: ['message_id']);
+    return rows.map((r) => r['message_id'] as String).toList();
+  }
+
+  /// Clears seen message entries older than [olderThanEpochMs] to manage storage.
+  Future<int> clearOldSeenMessages(int olderThanEpochMs) async {
+    final db = await database;
+    return db.delete(
+      _seenMessagesTable,
+      where: 'seen_at < ?',
+      whereArgs: [olderThanEpochMs],
     );
   }
 
@@ -199,8 +239,6 @@ class DatabaseHelper {
   // ---------------------------------------------------------------------------
 
   /// Closes the underlying database connection.
-  ///
-  /// After calling this, the next call to [database] will re-open the file.
   Future<void> close() async {
     final db = _db;
     if (db != null && db.isOpen) {
