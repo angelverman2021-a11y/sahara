@@ -4,8 +4,10 @@ import '../models/mesh_status.dart';
 import '../models/message.dart';
 import '../models/person.dart';
 import '../models/user_profile.dart';
+import '../utils/broadcast_localizer.dart';
 import 'emergency_service.dart';
 import 'native_bridge.dart';
+
 
 class MockService extends EmergencyService {
   MeshStatus _meshStatus = MeshStatus(
@@ -276,20 +278,23 @@ class MockService extends EmergencyService {
       ],
     };
 
+    const initBroadcastContent = 'Safe shelter available at Sector 4 Community Center with drinking water.';
     _broadcasts.add(
       Message(
         id: 'b_init',
         senderId: 'contact_emergency_team',
         receiverId: 'all',
         senderName: 'Emergency Team',
-        content: 'Safe shelter available at Sector 4 Community Center with drinking water.',
+        content: initBroadcastContent,
         timestamp: now.subtract(const Duration(minutes: 18)),
         type: MessageType.broadcast,
         priority: MessagePriority.high,
         isFromMe: false,
         hops: 1,
+        translations: BroadcastLocalizer.findTemplateTranslations(initBroadcastContent),
       ),
     );
+
 
     _initFromNative();
   }
@@ -339,29 +344,32 @@ class MockService extends EmergencyService {
   List<Message> get recentBroadcasts => List.unmodifiable(_broadcasts);
 
   final List<EmergencyAnnouncement> _announcements = [
-    const EmergencyAnnouncement(
+    EmergencyAnnouncement(
       id: 'ann_1',
       title: 'Cyclone Warning',
       message: 'Heavy rainfall and wind speeds up to 65 km/h expected in your sector. Move to designated storm shelters.',
       source: 'Disaster Response Cell',
       timeAgo: '12 min ago',
       severity: AnnouncementSeverity.warning,
+      translations: BroadcastLocalizer.announcementCatalog['ann_1'],
     ),
-    const EmergencyAnnouncement(
+    EmergencyAnnouncement(
       id: 'ann_2',
       title: 'Flood Evacuation Notice',
       message: 'Evacuation route active via North Bypass. Relief camp #3 open at Central High School.',
       source: 'Emergency Network',
       timeAgo: '25 min ago',
       severity: AnnouncementSeverity.evacuation,
+      translations: BroadcastLocalizer.announcementCatalog['ann_2'],
     ),
-    const EmergencyAnnouncement(
+    EmergencyAnnouncement(
       id: 'ann_3',
       title: 'Clean Water & Food Supply',
       message: 'Potable water tankers and ration kits available at Community Grounds Gate 2 until 6:00 PM.',
       source: 'Relief Team',
       timeAgo: '45 min ago',
       severity: AnnouncementSeverity.advisory,
+      translations: BroadcastLocalizer.announcementCatalog['ann_3'],
     ),
   ];
 
@@ -441,6 +449,7 @@ class MockService extends EmergencyService {
         priority: MessagePriority.critical,
         isFromMe: true,
         hops: 1,
+        translations: BroadcastLocalizer.getSosTranslations(coords),
       ),
     );
 
@@ -482,18 +491,20 @@ class MockService extends EmergencyService {
 
   @override
   void sendBroadcast({required String content}) {
+    final trimmedContent = content.trim();
     final newBroadcast = Message(
       id: 'b_${DateTime.now().millisecondsSinceEpoch}',
       senderId: 'me',
       receiverId: 'all',
       senderName: 'You',
-      content: content.trim(),
+      content: trimmedContent,
       timestamp: DateTime.now(),
       type: MessageType.broadcast,
       priority: MessagePriority.high,
       isDelivered: true,
       isFromMe: true,
       hops: 1,
+      translations: BroadcastLocalizer.findTemplateTranslations(trimmedContent),
     );
     _broadcasts.insert(0, newBroadcast);
     notifyListeners();

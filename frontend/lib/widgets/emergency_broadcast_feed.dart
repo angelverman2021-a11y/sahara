@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/announcement.dart';
+import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localizations.dart';
+
 
 class EmergencyBroadcastFeed extends StatelessWidget {
   final List<EmergencyAnnouncement> announcements;
@@ -155,6 +157,9 @@ class EmergencyBroadcastFeed extends StatelessWidget {
         break;
     }
 
+    final service = EmergencyServiceScope.of(context);
+    final langCode = AppLocalizations.codeForLanguage(service.selectedLanguage);
+
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -184,7 +189,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  announcement.source,
+                  announcement.localizedSource(langCode),
                   style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontSize: 11.5,
@@ -209,7 +214,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
 
           // Title
           Text(
-            announcement.title,
+            announcement.localizedTitle(langCode),
             style: const TextStyle(
               fontFamily: AppTheme.fontFamily,
               fontSize: 13.5,
@@ -222,7 +227,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
 
           // Message Content
           Text(
-            announcement.message,
+            announcement.localizedMessage(langCode),
             style: const TextStyle(
               fontFamily: AppTheme.fontFamily,
               fontSize: 12.5,

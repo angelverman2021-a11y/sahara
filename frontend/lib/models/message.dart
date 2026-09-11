@@ -22,6 +22,7 @@ class Message {
   final bool isDelivered;
   final bool isFromMe;
   final int hops;
+  final Map<String, String>? translations;
 
   const Message({
     required this.id,
@@ -35,12 +36,21 @@ class Message {
     this.isDelivered = true,
     required this.isFromMe,
     this.hops = 1,
+    this.translations,
   });
 
   String get timeFormatted {
     final hour = timestamp.hour.toString().padLeft(2, '0');
     final minute = timestamp.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+
+  /// Non-destructively resolves the localized content for given language code.
+  /// Falls back to English, or original content.
+  String localizedContent(String langCode) {
+    return translations?[langCode] ??
+        translations?['en'] ??
+        content;
   }
 
   Message copyWith({
@@ -55,6 +65,7 @@ class Message {
     bool? isDelivered,
     bool? isFromMe,
     int? hops,
+    Map<String, String>? translations,
   }) {
     return Message(
       id: id ?? this.id,
@@ -68,6 +79,8 @@ class Message {
       isDelivered: isDelivered ?? this.isDelivered,
       isFromMe: isFromMe ?? this.isFromMe,
       hops: hops ?? this.hops,
+      translations: translations ?? this.translations,
     );
   }
 }
+

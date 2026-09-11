@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sahra/main.dart';
+import 'package:sahra/models/announcement.dart';
 import 'package:sahra/services/mock_service.dart';
+import 'package:sahra/utils/broadcast_localizer.dart';
 import 'package:sahra/utils/date_input_formatter.dart';
 import 'package:sahra/utils/location_helper.dart';
 import 'package:sahra/widgets/app_logo.dart';
@@ -9,6 +11,7 @@ import 'package:sahra/widgets/brand_title.dart';
 import 'package:sahra/widgets/person_tile.dart';
 import 'package:sahra/widgets/sos_button.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 
 void setPhoneViewport(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 2400);
@@ -385,4 +388,129 @@ void main() {
       '12.3456° S, 45.6789° W',
     );
   });
+
+  test('BroadcastLocalizer translates default announcements across all 10 languages non-destructively', () {
+    final mockService = MockService();
+    final announcements = mockService.announcements;
+    expect(announcements.isNotEmpty, true);
+
+    final cycloneWarning = announcements.firstWhere((a) => a.id == 'ann_1');
+
+    // 1. Original data is preserved internally
+    expect(cycloneWarning.title, 'Cyclone Warning');
+    expect(
+      cycloneWarning.message,
+      'Heavy rainfall and wind speeds up to 65 km/h expected in your sector. Move to designated storm shelters.',
+    );
+
+    // 2. English (en)
+    expect(cycloneWarning.localizedTitle('en'), 'Cyclone Warning');
+
+    // 3. Hindi (hi)
+    expect(cycloneWarning.localizedTitle('hi'), 'चक्रवात की चेतावनी');
+    expect(
+      cycloneWarning.localizedMessage('hi'),
+      'आपके क्षेत्र में भारी वर्षा और 65 किमी/घंटा तक की हवाओं की संभावना है। निर्धारित तूफान आश्रयों में जाएं।',
+    );
+
+    // 4. Odia (or)
+    expect(cycloneWarning.localizedTitle('or'), 'ବାତ୍ୟା ସତର୍କତା');
+    expect(
+      cycloneWarning.localizedMessage('or'),
+      'ଆପଣଙ୍କ ଅଞ୍ଚଳରେ ପ୍ରବଳ ବର୍ଷା ଏବଂ ୬୫ କିମି/ଘଣ୍ଟା ବେଗରେ ପବନ ବହିବାର ସମ୍ଭାବନା ଅଛି। ନିର୍ଦ୍ଧାରିତ ବାତ୍ୟା ଆଶ୍ରୟସ୍ଥଳକୁ ଯାଆନ୍ତୁ।',
+    );
+
+    // 5. Bengali (bn)
+    expect(cycloneWarning.localizedTitle('bn'), 'ঘূর্ণিঝড় সতর্কতা');
+
+    // 6. Assamese (as)
+    expect(cycloneWarning.localizedTitle('as'), 'ঘূৰ্ণীবতাহৰ সতৰ্কবাণী');
+
+    // 7. Malayalam (ml)
+    expect(cycloneWarning.localizedTitle('ml'), 'ചുഴലിക്കാറ്റ് മുന്നറിയിപ്പ്');
+
+    // 8. Gujarati (gu)
+    expect(cycloneWarning.localizedTitle('gu'), 'વાવાઝોડાની ચેતવણી');
+
+    // 9. Maithili (mai)
+    expect(cycloneWarning.localizedTitle('mai'), 'चक्रवातक चेतावनी');
+
+    // 10. Bodo (brx)
+    expect(cycloneWarning.localizedTitle('brx'), 'बारहुंखा सांग्रांथि');
+
+    // 11. Telugu (te)
+    expect(cycloneWarning.localizedTitle('te'), 'తుఫాను హెచ్చరిక');
+  });
+
+  test('Broadcast content falls back gracefully to original language for untranslated custom broadcasts', () {
+    const custom = EmergencyAnnouncement(
+      id: 'ann_custom_99',
+      title: 'Custom Incident Alert',
+      message: 'Small fire contained in Sector 5 workshop. No casualties.',
+      source: 'Local Watch',
+      timeAgo: 'Just now',
+    );
+
+    // When no translations map is provided, falls back cleanly to original text
+    expect(custom.localizedTitle('hi'), 'Custom Incident Alert');
+    expect(custom.localizedMessage('hi'), 'Small fire contained in Sector 5 workshop. No casualties.');
+    expect(custom.localizedTitle('or'), 'Custom Incident Alert');
+    expect(custom.localizedMessage('bn'), 'Small fire contained in Sector 5 workshop. No casualties.');
+
+    // Never returns empty string
+    expect(custom.localizedTitle('te').isNotEmpty, true);
+    expect(custom.localizedMessage('te').isNotEmpty, true);
+  });
+
+  test('Newly composed broadcast generates full 10-language translations when using quick suggestion template', () {
+    final translations = BroadcastLocalizer.getTranslationsForComposed(
+      title: 'Emergency Warning',
+      message: 'Road blocked near Gate 2.',
+      severity: AnnouncementSeverity.warning,
+      source: 'You',
+    );
+
+    expect(translations['hi']?.title, 'आपातकालीन चेतावनी');
+    expect(translations['hi']?.message, 'गेट 2 के पास सड़क अवरुद्ध है।');
+    expect(translations['or']?.title, 'ଜରୁରୀକାଳୀନ ସତର୍କତା');
+    expect(translations['or']?.message, 'ଗେଟ୍ ୨ ନିକଟରେ ରାସ୍ତା ଅବରୋଧ ଅଛି।');
+    expect(translations['bn']?.title, 'জরুরি সতর্কতা');
+    expect(translations['bn']?.message, 'গেট ২ এর কাছে রাস্তা বন্ধ রয়েছে।');
+  });
+
+  testWidgets('Home EmergencyBroadcastFeed content translates dynamically when language is switched', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService();
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockService,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // In English initially:
+    expect(find.text('Cyclone Warning'), findsOneWidget);
+    expect(
+      find.text('Heavy rainfall and wind speeds up to 65 km/h expected in your sector. Move to designated storm shelters.'),
+      findsOneWidget,
+    );
+
+    // Switch language to Hindi:
+    mockService.setLanguage('Hindi');
+    await tester.pumpAndSettle();
+
+    // Verified: Announcement title and message changed to Hindi!
+    expect(find.text('चक्रवात की चेतावनी'), findsOneWidget);
+    expect(
+      find.text('आपके क्षेत्र में भारी वर्षा और 65 किमी/घंटा तक की हवाओं की संभावना है। निर्धारित तूफान आश्रयों में जाएं।'),
+      findsOneWidget,
+    );
+
+    // Switch language to Odia:
+    mockService.setLanguage('Odia');
+    await tester.pumpAndSettle();
+
+    // Verified: Announcement title changed to Odia!
+    expect(find.text('ବାତ୍ୟା ସତର୍କତା'), findsOneWidget);
+  });
 }
+

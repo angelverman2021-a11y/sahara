@@ -4,7 +4,9 @@ import '../models/message.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localizations.dart';
+import '../utils/broadcast_localizer.dart';
 import '../widgets/brand_title.dart';
+
 
 class BroadcastScreen extends StatefulWidget {
   const BroadcastScreen({super.key});
@@ -19,12 +21,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   String _lastBroadcastedMessage = '';
   AnnouncementSeverity _selectedSeverity = AnnouncementSeverity.warning;
 
-  final List<String> _suggestions = const [
-    'Road blocked near Gate 2.',
-    'Safe shelter available.',
-    'Do not use this route.',
-    'Drinking water point active at Relief Tent 3.',
-  ];
 
   @override
   void dispose() {
@@ -61,6 +57,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         break;
     }
 
+    // Compute non-destructive 10-language translations
+    final translations = BroadcastLocalizer.getTranslationsForComposed(
+      title: title,
+      message: text,
+      severity: _selectedSeverity,
+      source: senderName,
+    );
+
     // Add to announcements so it immediately appears in the Home feed
     final newAnnouncement = EmergencyAnnouncement(
       id: 'ann_${DateTime.now().millisecondsSinceEpoch}',
@@ -69,11 +73,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       source: senderName,
       timeAgo: 'Just now',
       severity: _selectedSeverity,
+      translations: translations,
     );
     service.addAnnouncement(newAnnouncement);
 
     // Relayed via mesh P2P service
     service.sendBroadcast(content: text);
+
 
     setState(() {
       _lastBroadcastedMessage = text;
@@ -215,7 +221,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         Wrap(
           spacing: 6,
           runSpacing: 6,
-          children: _suggestions.map((template) {
+          children: BroadcastLocalizer.getSuggestionsForLanguage(
+            AppLocalizations.codeForLanguage(service.selectedLanguage),
+          ).map((template) {
             return ActionChip(
               label: Text(
                 template,
@@ -307,8 +315,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          ...recentBroadcasts.map((b) => _buildRecentBroadcastCard(b)),
+          ...recentBroadcasts.map((b) => _buildRecentBroadcastCard(context, b)),
         ],
+
       ],
     );
   }
@@ -474,15 +483,22 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                '"$_lastBroadcastedMessage"',
-                style: const TextStyle(
-                  fontFamily: AppTheme.fontFamily,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textPrimary,
-                  fontStyle: FontStyle.italic,
-                ),
+              Builder(
+                builder: (ctx) {
+                  final service = EmergencyServiceScope.of(ctx);
+                  final langCode = AppLocalizations.codeForLanguage(service.selectedLanguage);
+                  final displayed = BroadcastLocalizer.resolveMessageContent(_lastBroadcastedMessage, langCode);
+                  return Text(
+                    '"$displayed"',
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textPrimary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -534,7 +550,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     );
   }
 
-  Widget _buildRecentBroadcastCard(Message message) {
+  Widget _buildRecentBroadcastCard(BuildContext context, Message message) {
+    final service = EmergencyServiceScope.of(context);
+    final langCode = AppLocalizations.codeForLanguage(service.selectedLanguage);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -570,7 +589,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            message.content,
+            message.localizedContent(langCode),
             style: const TextStyle(
               fontFamily: AppTheme.fontFamily,
               fontSize: 13,
