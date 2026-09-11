@@ -438,21 +438,23 @@ class MeshService {
 
     _recordSeenMessageId(packet.messageId);
 
+    final outgoingPacket = packet.copyWithDecrementedTtl();
+
     // If destination is directly connected, send straight to it
     if (_connectedPeers.contains(receiverNodeId)) {
-      await transport.sendRawPacket(receiverNodeId, packet.toUtf8Bytes());
+      await transport.sendRawPacket(receiverNodeId, outgoingPacket.toUtf8Bytes());
       return;
     }
 
     // Forward to all available peers
     if (_connectedPeers.isNotEmpty) {
-      final payload = packet.toUtf8Bytes();
+      final payload = outgoingPacket.toUtf8Bytes();
       for (final peer in _connectedPeers) {
         await transport.sendRawPacket(peer, payload);
       }
     } else {
       // Destination not reachable right now: buffer in store-and-forward
-      _bufferMessage(packet);
+      _bufferMessage(outgoingPacket);
     }
   }
 
@@ -481,13 +483,15 @@ class MeshService {
     // Deliver to local broadcast stream as well
     _broadcastController.add(packet);
 
+    final outgoingPacket = packet.copyWithDecrementedTtl();
+
     if (_connectedPeers.isNotEmpty) {
-      final payload = packet.toUtf8Bytes();
+      final payload = outgoingPacket.toUtf8Bytes();
       for (final peer in _connectedPeers) {
         await transport.sendRawPacket(peer, payload);
       }
     } else {
-      _bufferMessage(packet);
+      _bufferMessage(outgoingPacket);
     }
   }
 
@@ -520,13 +524,15 @@ class MeshService {
     // Deliver to local SOS stream
     _sosController.add(packet);
 
+    final outgoingPacket = packet.copyWithDecrementedTtl();
+
     if (_connectedPeers.isNotEmpty) {
-      final payload = packet.toUtf8Bytes();
+      final payload = outgoingPacket.toUtf8Bytes();
       for (final peer in _connectedPeers) {
         await transport.sendRawPacket(peer, payload);
       }
     } else {
-      _bufferMessage(packet);
+      _bufferMessage(outgoingPacket);
     }
   }
 
