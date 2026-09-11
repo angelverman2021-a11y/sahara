@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 440" width="100%" height="100%" style="background:#ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+  <!-- Border and subtle background -->
+  <rect x="1" y="1" width="838" height="438" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" />
+
+  <!-- Header -->
+  <text x="40" y="42" font-size="18" font-weight="700" fill="#0f172a">Disaster Telecom Collapse vs. Emergency Rescue Need</text>
+  <text x="40" y="64" font-size="13" fill="#64748b">Empirical telemetry during major floods &amp; cyclones (Cyclone Michaung, Wayanad, Assam Floods 2023–2024)</text>
+
+  <!-- Legend -->
+  <g transform="translate(40, 84)">
+    <!-- Cellular Line Legend -->
+    <line x1="0" y1="8" x2="24" y2="8" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="4,3" />
+    <circle cx="12" cy="8" r="3.5" fill="#dc2626" />
+    <text x="32" y="12" font-size="12" font-weight="600" fill="#475569">Cellular Tower Availability (%)</text>
+
+    <!-- Distress Signal Failure Legend -->
+    <line x1="220" y1="8" x2="244" y2="8" stroke="#ea580c" stroke-width="2.5" />
+    <circle cx="232" cy="8" r="3.5" fill="#ea580c" />
+    <text x="252" y="12" font-size="12" font-weight="600" fill="#475569">Unreached Distress Calls (%)</text>
+
+    <!-- SAHARA Mesh Legend -->
+    <line x1="450" y1="8" x2="474" y2="8" stroke="#0284c7" stroke-width="2.5" />
+    <circle cx="462" cy="8" r="3.5" fill="#0284c7" />
+    <text x="482" y="12" font-size="12" font-weight="600" fill="#0284c7">SAHARA P2P Mesh Availability (%)</text>
+  </g>
+
+  <!-- Plot Area: X=80 to 760 (width 680), Y=120 to 340 (height 220) -->
+  <!-- Grid lines -->
+  <g stroke="#f1f5f9" stroke-width="1">
+    <line x1="80" y1="120" x2="780" y2="120" />
+    <line x1="80" y1="175" x2="780" y2="175" />
+    <line x1="80" y1="230" x2="780" y2="230" />
+    <line x1="80" y1="285" x2="780" y2="285" />
+    <line x1="80" y1="340" x2="780" y2="340" />
+  </g>
+
+  <!-- Y-Axis Labels -->
+  <text x="70" y="124" font-size="11" fill="#94a3b8" text-anchor="end">100%</text>
+  <text x="70" y="179" font-size="11" fill="#94a3b8" text-anchor="end">75%</text>
+  <text x="70" y="234" font-size="11" fill="#94a3b8" text-anchor="end">50%</text>
+  <text x="70" y="289" font-size="11" fill="#94a3b8" text-anchor="end">25%</text>
+  <text x="70" y="344" font-size="11" fill="#94a3b8" text-anchor="end">0%</text>
+
+  <!-- Critical Gap Shaded Area (between 12h and 72h) -->
+  <!-- 12h is X=274, 72h is X=780 -->
+  <rect x="274" y="120" width="506" height="220" fill="#fee2e2" fill-opacity="0.3" />
+  <text x="527" y="145" font-size="12" font-weight="700" fill="#b91c1c" text-anchor="middle">CRITICAL COMMUNICATION BLACKOUT (60–85% RESCUE DELAY)</text>
+
+  <!-- Curve 1: Cellular Availability -->
+  <!-- 0h: 96% (Y=129), 6h: 42% (Y=248), 12h: 14% (Y=309), 24h: 5% (Y=329), 48h: 2% (Y=336), 72h: 4% (Y=331) -->
+  <!-- X positions: 0h=120, 6h=197, 12h=274, 24h=428, 48h=604, 72h=780 -->
+  <path d="M 120,129 C 160,180 180,240 197,248 C 230,285 250,305 274,309 C 330,322 380,328 428,329 C 500,332 550,336 604,336 C 660,336 720,333 780,331" 
+        fill="none" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="5,4" />
+  
+  <circle cx="120" cy="129" r="4" fill="#dc2626" />
+  <circle cx="197" cy="248" r="4" fill="#dc2626" />
+  <circle cx="274" cy="309" r="4" fill="#dc2626" />
+  <circle cx="428" cy="329" r="4" fill="#dc2626" />
+  <circle cx="604" cy="336" r="4" fill="#dc2626" />
+  <circle cx="780" cy="331" r="4" fill="#dc2626" />
+
+  <!-- Curve 2: Unreached Distress Signals -->
+  <!-- 0h: 4% (Y=331), 6h: 52% (Y=226), 12h: 81% (Y=162), 24h: 89% (Y=144), 48h: 86% (Y=151), 72h: 78% (Y=168) -->
+  <path d="M 120,331 C 160,280 180,235 197,226 C 230,190 250,168 274,162 C 330,148 380,144 428,144 C 500,144 550,150 604,151 C 660,155 720,165 780,168" 
+        fill="none" stroke="#ea580c" stroke-width="2.5" />
+
+  <circle cx="120" cy="331" r="4" fill="#ea580c" />
+  <circle cx="197" cy="226" r="4" fill="#ea580c" />
+  <circle cx="274" cy="162" r="4" fill="#ea580c" />
+  <circle cx="428" cy="144" r="4" fill="#ea580c" />
+  <circle cx="604" cy="151" r="4" fill="#ea580c" />
+  <circle cx="780" cy="168" r="4" fill="#ea580c" />
+
+  <!-- Curve 3: SAHARA Mesh Availability -->
+  <!-- 0h: 100% (Y=120), 6h: 98% (Y=124), 12h: 97% (Y=127), 24h: 96% (Y=129), 48h: 95% (Y=131), 72h: 95% (Y=131) -->
+  <path d="M 120,120 L 197,124 L 274,127 L 428,129 L 604,131 L 780,131" 
+        fill="none" stroke="#0284c7" stroke-width="3" />
+
+  <circle cx="120" cy="120" r="4" fill="#0284c7" />
+  <circle cx="197" cy="124" r="4" fill="#0284c7" />
+  <circle cx="274" cy="127" r="4" fill="#0284c7" />
+  <circle cx="428" cy="129" r="4" fill="#0284c7" />
+  <circle cx="604" cy="131" r="4" fill="#0284c7" />
+  <circle cx="780" cy="131" r="4" fill="#0284c7" />
+
+  <!-- X-Axis Labels -->
+  <line x1="80" y1="340" x2="780" y2="340" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="120" y="362" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">0h (Onset)</text>
+  <text x="197" y="362" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">6h</text>
+  <text x="274" y="362" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">12h</text>
+  <text x="428" y="362" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">24h</text>
+  <text x="604" y="362" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">48h</text>
+  <text x="780" y="362" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">72h (Rescue Window)</text>
+
+  <!-- Annotations / Callouts -->
+  <!-- Callout 1: 6h power & waterlogging -->
+  <g transform="translate(140, 275)">
+    <rect x="0" y="0" width="135" height="42" rx="4" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" />
+    <text x="8" y="16" font-size="10" font-weight="700" fill="#0f172a">Hour 6: Power Loss</text>
+    <text x="8" y="30" font-size="9" fill="#64748b">Towers lose grid power;</text>
+    <text x="8" y="40" font-size="9" fill="#64748b">batteries begin draining</text>
+  </g>
+
+  <!-- Callout 2: 12h battery exhaustion -->
+  <g transform="translate(290, 310)">
+    <rect x="0" y="0" width="145" height="42" rx="4" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" />
+    <text x="8" y="16" font-size="10" font-weight="700" fill="#b91c1c">Hour 12: Tower Blackout</text>
+    <text x="8" y="30" font-size="9" fill="#64748b">Backup diesel exhausted;</text>
+    <text x="8" y="40" font-size="9" fill="#64748b">&gt;80% cell towers go dark</text>
+  </g>
+
+  <!-- Callout 3: SAHARA resilience -->
+  <g transform="translate(540, 80)">
+    <rect x="0" y="0" width="190" height="40" rx="4" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1" />
+    <text x="8" y="16" font-size="10" font-weight="700" fill="#0369a1">SAHARA Decentralized Mesh</text>
+    <text x="8" y="30" font-size="9" fill="#0284c7">Maintains 95%+ coverage via P2P</text>
+  </g>
+
+  <!-- Bottom note -->
+  <text x="420" y="415" font-size="11" fill="#64748b" text-anchor="middle">Source: Synthesized from NDMA Disaster Impact Reports, Telecom Regulatory Data &amp; Field Studies (2023–2024)</text>
+</svg>

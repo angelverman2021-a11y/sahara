@@ -18,11 +18,56 @@
 
 ---
 
-## Problem and Product Vision
+## Crisis Reality: Recent Floods & Cyclones in India
 
-During natural disasters (cyclones, floods, earthquakes) or power grid collapses, **cellular networks are among the first services to fail** due to power loss, physical damage to base stations, or severe congestion. Citizens are left without means to request rescue, locate family members, or receive official evacuation advisories.
+During severe climate disasters, **cellular networks collapse within the first 6 to 12 hours**. Heavy rainfall, storm surges, and falling trees sever optical fiber backhauls, flood ground-level exchange stations, and cut municipal power grids. Within hours, backup battery banks at cell towers exhaust completely, leaving entire cities and rural districts in complete telecommunication dark zones.
 
-**SAHARA transforms consumer smartphones into an autonomous, decentralized communication mesh.** Using **Google Nearby Connections (Bluetooth Low Energy and Wi-Fi Direct)**, devices discover each other and exchange packets directly over radio signals without relying on SIM cards, cellular towers, Wi-Fi routers, or internet connectivity.
+### Documented Telecommunications Failure in Recent Disasters
+
+| Disaster Event | Region & Date | Impact Scale | Telecom Outage Rate | Critical Rescue Bottleneck |
+|---|---|---|---|---|
+| **Cyclone Michaung** | Chennai & Coastal AP (Dec 2023) | 4,000,000+ residents marooned | **85%+ mobile towers down** | Over 17,000 distress calls failed to connect. Rescue boats operated blind in inundated neighborhoods (Tambaram, Velachery) because victims had no cellular reception. |
+| **Wayanad Landslides & Floods** | Kerala (July 2024) | 400+ casualties | **100% blackout at epicenter** | Telecom cables sheared and towers smashed within first 30 minutes. Rescue teams experienced a 12-hour information void during the vital golden window. |
+| **Assam Floods** | 30 Districts, Assam (June–July 2024) | 2,400,000+ people displaced | **Widespread rural tower failure** | Isolated river island settlements ("chars") remained out of cellular reach for days. Over 65% of rescue requests suffered critical multi-day delays. |
+| **Cyclone Biparjoy** | Coastal Gujarat & Kutch (June 2023) | 100,000+ evacuated, hundreds of villages | **5,120+ telecom towers disrupted** | Diesel generator backups failed due to extreme winds, cutting off emergency coordination across coastal hamlets for 36 hours. |
+| **Cyclone Remal** | West Bengal & Coastal North-East (May 2024) | Millions affected | **Severe transmission disruption** | Power grid collapse left tens of thousands of stranded residents with zero network access during peak storm surge. |
+
+---
+
+## Why We Actually Need SAHARA
+
+Traditional disaster response relies on centralized cellular infrastructure:
+
+```mermaid
+flowchart TD
+    subgraph Traditional ["Traditional Systems: Single Point of Failure"]
+        T1["Citizen Stranded in Flood"] -->|"Requires cellular tower"| T2["Local Cellular Base Station"]
+        T2 -->|"Flooding / grid failure"| T3["Telecom Blackout ('No Service')"]
+        T3 -->|"Distress call dropped"| T4["Rescue Teams Operate Blind"]
+    end
+
+    subgraph Sahara ["SAHARA Mesh: Autonomous & Decentralized"]
+        S1["Citizen Stranded in Flood"] -->|"Zero-infrastructure radio (BLE / Wi-Fi Direct)"| S2["Neighboring Devices (Relay Node)"]
+        S2 -->|"Multi-hop / Store & Forward"| S3["Rescue Boat / Volunteer Drone"]
+        S3 -->|"Direct packet delivery"| S4["Rescue Team Dispatched with Precise GPS"]
+    end
+```
+
+### The "No Service" Paradox
+During floods, citizens almost always have smartphones with them, and those devices often retain battery charge for 24 to 48 hours. However, because the surrounding towers are flooded or powered down, those phones display **"No Service"** or **"Emergency Calls Only"**, rendering them completely useless when people need help most.
+
+### The Disaster Rescue Gap Over Time
+The following data chart illustrates the divergence between cellular network availability and emergency distress need over the critical 72-hour golden rescue window:
+
+<p align="center">
+  <img src="assets/disaster_impact_chart.svg" alt="Disaster Telecom Collapse vs. Emergency Rescue Need" width="100%" />
+</p>
+
+### How SAHARA Closes the Gap
+1. **Zero Infrastructure Dependency**: Uses the radios already built into every Android phone (Bluetooth Low Energy and Wi-Fi Direct) to form direct point-to-point links up to 100+ meters per hop.
+2. **Density Advantage**: Unlike cellular towers that choke and crash under crowd congestion, a mesh network becomes stronger, denser, and more resilient as more devices join.
+3. **Multi-Hop Relay**: Distress signals hop from house to house, reaching rescue boats, relief volunteers, or evacuation shelters without a single operational cell tower.
+4. **Store and Forward (Delay-Tolerant Networking)**: If no rescue unit is immediately in range, the phone holds the encrypted distress packet locally and automatically pushes it forward the instant a responder or volunteer boat comes into radio proximity.
 
 ---
 
