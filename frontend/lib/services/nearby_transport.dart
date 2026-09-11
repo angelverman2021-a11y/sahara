@@ -200,7 +200,7 @@ class NearbyConnectionsTransport implements MeshTransport {
     try {
       await nearby.acceptConnection(
         endpointId,
-        onPayLoadRecieve: (String epId, Payload payload) {
+        onPayLoadRecieved: (String epId, Payload payload) {
           if (payload.type == PayloadType.BYTES && payload.bytes != null) {
             final senderNodeId = _endpointIdToNodeId[epId] ?? epId;
             _eventsController.add(MeshTransportEvent(
