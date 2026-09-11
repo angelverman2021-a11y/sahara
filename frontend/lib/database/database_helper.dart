@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-import '../models/message_model.dart';
+import 'message_model.dart';
 
 /// A singleton helper class that manages the local SQLite database for
 /// the disaster management chat application.

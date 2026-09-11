@@ -1,7 +1,0 @@
-# Screens
-# Minimal, stress-friendly emergency UI screens:
-# - home_screen.dart: Main hub (Nearby people, SOS trigger, Messages, Family, Broadcast, Battery status)
-# - sos_screen.dart: One-Tap SOS dispatch with GPS coordinates
-# - messages_screen.dart: P2P chat through multi-hop mesh
-# - family_screen.dart: Phone-based family lookup, reachability status, hop display & "Save to Family"
-# - broadcast_screen.dart: Local emergency hazard announcements

@@ -1,6 +1,0 @@
-# Widgets
-# Reusable, lightweight, high-contrast UI components:
-# - sos_button.dart: High-visibility primary emergency button
-# - mesh_status_card.dart: Shows current mesh operational status (ACTIVE / REDUCED / SOS_ONLY)
-# - battery_indicator.dart: Battery gauge reflecting automatic mesh discipline
-# - peer_counter_badge.dart: Number of directly connected nearby nodes

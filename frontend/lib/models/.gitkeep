@@ -1,6 +1,0 @@
-# Models
-# Lightweight data structures for mesh communication:
-# - message_model.dart: Message packet (message_id, sender_id, receiver_id, type, priority, content, ttl, status, timestamp)
-# - user_model.dart: User identity (user_id [permanent], name, phone [search key], status, node_id [mesh])
-# - family_member_model.dart: Linked family members (family_id, user_id, family_member_id, relationship, hops, is_reachable)
-# - emergency_report_model.dart: SOS and hazard broadcast payload (report_id, sender_id, type, location, priority, details, timestamp)

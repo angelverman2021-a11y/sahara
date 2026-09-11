@@ -7,8 +7,6 @@
 // selected native transport implementation."
 
 import 'dart:async';
-import 'dart:collection';
-import 'dart:convert';
 import 'dart:math';
 
 import '../models/message_model.dart';
