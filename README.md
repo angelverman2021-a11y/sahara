@@ -258,29 +258,14 @@ cd backend && python main.py
     <img src="https://github.com/shreyaarora.png" width="72" height="72" style="border-radius:50%;border:2px solid #4A90D9" alt="Shreya">
   </a>
   <br/><br/>
+  <a href="https://github.com/angelverman2021-a11y"><strong>Angel Verman</strong></a> &nbsp;·&nbsp;
   <a href="https://github.com/rubyjensi"><strong>Jensi</strong></a> &nbsp;·&nbsp;
   <a href="https://github.com/aroralemon"><strong>Shreya Arora</strong></a> &nbsp;·&nbsp;
-  <a href="https://github.com/shreyaarora"><strong>Shreya</strong></a>
   <br/><br/>
   <em>Three women. One hackathon. Zero cell signal required.</em>
   <br/>
   Built with a lot of chai at <strong>MUJ Hackathon 2026</strong>
 </p>
-
----
-
-## Roadmap
-
-- [x] P2P mesh messaging over Wi-Fi Direct + BLE
-- [x] SOS beacon with live GPS broadcast
-- [x] End-to-end encryption on all messages
-- [x] Store-and-forward offline queue
-- [x] Cloud sync with automatic retry
-- [ ] LoRa hardware integration (long-range)
-- [ ] 15+ language support — production ready
-- [ ] Offline map tiles for disaster zones
-- [ ] Family finding — production ready
-- [ ] Rescue coordinator web dashboard
 
 ---
 
