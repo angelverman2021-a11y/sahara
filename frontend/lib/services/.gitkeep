@@ -1,0 +1,7 @@
+# Services
+# Core offline application services & background engines:
+# - mesh_service.dart: Flooding + deduplication mesh relay engine
+# - discovery_service.dart: P2P device discovery (Nearby Connections / BLE / Wi-Fi Direct)
+# - battery_discipline_service.dart: Throttles discovery frequency & priorities based on battery level
+# - location_service.dart: On-demand one-shot GPS coordinate fetcher for SOS packets
+# - cloud_sync_service.dart: Lightweight HTTP client that uploads queued data when internet reconnects

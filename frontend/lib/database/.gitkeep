@@ -1,0 +1,7 @@
+# Database
+# Local SQLite persistence layer (offline store-and-forward queue):
+# - local_database.dart: Handles on-device SQLite database operations
+#   * messages: Pending outgoing, relayed, and received messages
+#   * seen_messages: Table of seen message IDs for loop and duplicate suppression
+#   * family_contacts: Offline cache of registered family relationships
+#   * user_profile: Local node credentials (User ID, Name, Phone, Node ID)

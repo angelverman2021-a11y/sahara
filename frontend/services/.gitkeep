@@ -1,7 +1,0 @@
-# SAHARA Services
-# Core offline application services:
-# - NearbyMeshService (Discovery, connection, payload exchange)
-# - RoutingEngine (Hop decrement, TTL, duplicate prevention)
-# - StoreForwardService (Local SQLite persistence queue)
-# - BatteryDisciplineService (Battery state monitoring and mesh throttling)
-# - LocationService (On-demand GPS coordinates for SOS)

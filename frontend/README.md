@@ -17,10 +17,13 @@ The `frontend/` directory contains the core SAHARA client application (built wit
 ```text
 frontend/
 │
-├── screens/       # Minimalist emergency screens (Home, SOS, Family, Broadcast, Chat)
-├── components/    # Reusable lightweight widgets (MeshStatusIndicator, BatteryGauge, ActionButtons)
-├── services/      # Mesh engine, P2P discovery, SQLite storage, Battery monitor, Routing logic
-└── assets/        # Lightweight icons & sound cues (strictly audited for size)
+├── lib/
+│   ├── screens/       # Minimalist emergency screens (Home, SOS, Family, Broadcast, Messages)
+│   ├── widgets/       # Reusable lightweight UI widgets (SOS button, Mesh status, Battery indicator)
+│   ├── models/        # Data models (Message, User, Family, EmergencyReport)
+│   ├── database/      # Local SQLite persistence (Store & Forward, Seen message deduplication)
+│   └── services/      # Mesh engine, P2P discovery, Battery discipline, Location, Cloud sync
+└── assets/            # Lightweight icons & sound cues (strictly audited for 8-10MB limit)
 ```
 
 ---
