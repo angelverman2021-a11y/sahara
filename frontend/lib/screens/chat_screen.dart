@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/person.dart';
+import '../services/emergency_service.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/message_bubble.dart';
@@ -19,9 +20,21 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  EmergencyService? _service;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final service = EmergencyServiceScope.of(context);
+    if (_service != service) {
+      _service = service;
+      _service?.setActiveChatPersonId(widget.person.id);
+    }
+  }
 
   @override
   void dispose() {
+    _service?.setActiveChatPersonId(null);
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -57,6 +70,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final service = EmergencyServiceScope.of(context);
     final messages = service.getMessages(widget.person.id);
     final person = service.getPersonById(widget.person.id) ?? widget.person;
+    final rawName = person.name.trim();
+    final displayName = (rawName.isEmpty || rawName.toLowerCase() == 'sahara user')
+        ? (person.phoneNumber != null && person.phoneNumber!.isNotEmpty
+            ? person.phoneNumber!
+            : (person.id.startsWith('NODE_')
+                ? 'Mesh Peer (${person.id.substring(person.id.length >= 4 ? person.id.length - 4 : 0)})'
+                : person.id))
+        : rawName;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -67,7 +88,7 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              person.name,
+              displayName,
               style: const TextStyle(
                 fontFamily: AppTheme.fontFamily,
                 fontSize: 16,

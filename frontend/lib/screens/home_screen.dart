@@ -38,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _syncBattery();
     _checkInitialNotification();
+    NotificationService().requestPermission();
   }
 
   Future<void> _checkInitialNotification() async {

@@ -65,6 +65,7 @@ class _SaharaAppState extends State<SaharaApp> {
         navigatorKey: _navigatorKey,
         emergencyService: activeService,
       );
+      NotificationService().requestPermission();
     }
   }
 

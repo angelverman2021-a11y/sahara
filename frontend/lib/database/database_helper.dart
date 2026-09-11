@@ -22,7 +22,7 @@ class DatabaseHelper {
   // ---------------------------------------------------------------------------
 
   static const String _dbName = 'offline_messages.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 4;
 
   static const String _messagesTable = 'messages';
   static const String _seenMessagesTable = 'seen_messages';
@@ -79,7 +79,8 @@ class DatabaseHelper {
         content          TEXT    NOT NULL,
         timestamp        INTEGER NOT NULL,
         ttl              INTEGER NOT NULL,
-        status           TEXT    NOT NULL DEFAULT 'PENDING'
+        status           TEXT    NOT NULL DEFAULT 'PENDING',
+        sender_name      TEXT
       )
     ''');
 
@@ -99,7 +100,8 @@ class DatabaseHelper {
         priority    TEXT    NOT NULL,
         details     TEXT    NOT NULL,
         timestamp   INTEGER NOT NULL,
-        status      TEXT    NOT NULL DEFAULT 'PENDING'
+        status      TEXT    NOT NULL DEFAULT 'PENDING',
+        sender_name TEXT
       )
     ''');
 
@@ -154,6 +156,18 @@ class DatabaseHelper {
         )
       ''');
     }
+
+    if (oldVersion < 3) {
+      try {
+        await db.execute('ALTER TABLE $_messagesTable ADD COLUMN sender_name TEXT');
+      } catch (_) {}
+    }
+
+    if (oldVersion < 4) {
+      try {
+        await db.execute('ALTER TABLE $_emergencyTable ADD COLUMN sender_name TEXT');
+      } catch (_) {}
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -165,12 +179,40 @@ class DatabaseHelper {
   /// Uses [MessagePacket.toJson] for strict 1:1 column mapping.
   /// Returns the row ID of the newly inserted or updated row.
   Future<int> insertMessage(MessagePacket message) async {
-    final db = await database;
-    return db.insert(
-      _messagesTable,
-      message.toJson(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      final db = await database;
+      final map = Map<String, dynamic>.from(message.toJson());
+      return await db.insert(
+        _messagesTable,
+        map,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      // Defensive recovery: dynamically add column if missing on existing installations
+      try {
+        final db = await database;
+        await db.execute('ALTER TABLE $_messagesTable ADD COLUMN sender_name TEXT');
+        final map = Map<String, dynamic>.from(message.toJson());
+        return await db.insert(
+          _messagesTable,
+          map,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } catch (_) {
+        // Last line of defense: strip sender_name to guarantee message row is saved
+        try {
+          final db = await database;
+          final safeMap = Map<String, dynamic>.from(message.toJson())..remove('sender_name');
+          return await db.insert(
+            _messagesTable,
+            safeMap,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        } catch (_) {
+          return -1;
+        }
+      }
+    }
   }
 
   /// Returns every message row in the table as a list of [MessagePacket].
@@ -334,14 +376,54 @@ class DatabaseHelper {
   // Emergency Reports CRUD
   // ---------------------------------------------------------------------------
 
-  /// Inserts or replaces an emergency report in SQLite.
+  /// Inserts or replaces an emergency report in SQLite with defensive fallback.
   Future<int> insertEmergencyReport(Map<String, dynamic> report) async {
-    final db = await database;
-    return db.insert(
-      _emergencyTable,
-      report,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      final db = await database;
+      return await db.insert(
+        _emergencyTable,
+        report,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      try {
+        final db = await database;
+        await db.execute('ALTER TABLE $_emergencyTable ADD COLUMN sender_name TEXT');
+        return await db.insert(
+          _emergencyTable,
+          report,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } catch (_) {
+        try {
+          final db = await database;
+          final safeReport = Map<String, dynamic>.from(report)..remove('sender_name');
+          return await db.insert(
+            _emergencyTable,
+            safeReport,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        } catch (_) {
+          return -1;
+        }
+      }
+    }
+  }
+
+  /// Returns up to [limit] most recent emergency broadcasts and SOS alerts stored locally.
+  Future<List<MessagePacket>> getEmergencyBroadcastHistory({int limit = 50}) async {
+    try {
+      final db = await database;
+      final rows = await db.query(
+        _messagesTable,
+        where: "type = 'BROADCAST' OR type = 'SOS'",
+        orderBy: 'timestamp DESC',
+        limit: limit,
+      );
+      return rows.map((r) => MessagePacket.fromJson(r)).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Returns all stored emergency reports, newest first.

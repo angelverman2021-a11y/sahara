@@ -100,6 +100,30 @@ class NotificationService {
     } catch (_) {}
   }
 
+  /// Shows peer ping check notification with sound and short vibration alert.
+  Future<void> showPingNotification({
+    required String senderName,
+    required String personId,
+    String? id,
+  }) async {
+    try {
+      await _channel.invokeMethod('showPingNotification', {
+        'senderName': senderName,
+        'personId': personId,
+        'id': id ?? 'ping_${DateTime.now().millisecondsSinceEpoch}',
+      });
+    } catch (_) {}
+  }
+
+  /// Directly triggers physical device vibration.
+  Future<void> vibrateDevice({List<int>? pattern}) async {
+    try {
+      await _channel.invokeMethod('vibrateDevice', {
+        'pattern': pattern ?? [0, 300, 150, 300],
+      });
+    } catch (_) {}
+  }
+
   /// Retrieves initial notification intent payload if app was launched via notification click.
   Future<Map<String, String>?> getInitialNotificationAction() async {
     try {

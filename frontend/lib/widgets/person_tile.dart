@@ -22,6 +22,15 @@ class PersonTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isReachable = person.isReachable;
+    final displayName = (person.name.isNotEmpty &&
+            person.name != 'SAHARA User' &&
+            person.name != 'Sahara User')
+        ? person.name
+        : (person.phoneNumber?.isNotEmpty == true
+            ? person.phoneNumber!
+            : (person.id.startsWith('NODE_')
+                ? 'Mesh Peer (${person.id.substring(person.id.length >= 4 ? person.id.length - 4 : 0)})'
+                : person.id));
 
     return Container(
       decoration: BoxDecoration(
@@ -64,7 +73,7 @@ class PersonTile extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          person.name.isNotEmpty ? person.name[0].toUpperCase() : '?',
+                          displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
                           style: TextStyle(
                             fontFamily: AppTheme.fontFamily,
                             fontSize: 16,
@@ -87,7 +96,7 @@ class PersonTile extends StatelessWidget {
                             children: [
                               Flexible(
                                 child: Text(
-                                  person.name,
+                                  displayName,
                                   style: const TextStyle(
                                     fontFamily: AppTheme.fontFamily,
                                     fontSize: 15,

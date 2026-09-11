@@ -9,8 +9,18 @@ class MessageType {
   static const String text = 'TEXT';
   static const String sos = 'SOS';
   static const String broadcast = 'BROADCAST';
+  static const String ping = 'PING';
+  static const String historyRequest = 'HISTORY_REQUEST';
+  static const String historyResponse = 'HISTORY_RESPONSE';
 
-  static const Set<String> all = {text, sos, broadcast};
+  static const Set<String> all = {
+    text,
+    sos,
+    broadcast,
+    ping,
+    historyRequest,
+    historyResponse,
+  };
 
   static bool isValid(String type) => all.contains(type);
 }

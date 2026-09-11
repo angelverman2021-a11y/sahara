@@ -29,6 +29,7 @@ build/
 # Environment variables
 .env
 .env.local
-sahra/
+/sahra/
 release_apks/
+*.apk
 

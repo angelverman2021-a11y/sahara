@@ -19,6 +19,10 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -42,8 +46,50 @@ class MainActivity : FlutterActivity() {
     private var methodChannel: MethodChannel? = null
 
     companion object {
-        const val EMERGENCY_CHANNEL_ID = "sahara_emergency_channel"
-        const val FAMILY_CHANNEL_ID = "sahara_family_channel"
+        const val EMERGENCY_CHANNEL_ID = "emergency_alerts"
+        const val FAMILY_CHANNEL_ID = "family_messages"
+        const val PING_CHANNEL_ID = "ping_alerts"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        SaharaMeshForegroundService.start(this)
+    }
+
+    private fun triggerDeviceVibration(pattern: LongArray) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                val vibrator = vibratorManager?.defaultVibrator
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                    Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] VIBRATION_TRIGGERED")
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                    } else {
+                        vibrator.vibrate(pattern, -1)
+                    }
+                    Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] VIBRATION_TRIGGERED")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SAHARA-NOTIFY", "[SAHARA-NOTIFY] VIBRATION_FAILED: ${e.message}")
+        }
     }
 
     private fun createNotificationChannels() {
@@ -56,7 +102,18 @@ class MainActivity : FlutterActivity() {
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
                 .build()
 
-            // 1. Emergency Channel (High Priority, Loud Vibration, Public Visibility)
+            // 0. Background Mesh Service Channel (Low Priority, Quiet)
+            val meshChannel = NotificationChannel(
+                SaharaMeshForegroundService.SERVICE_CHANNEL_ID,
+                "Sahara Mesh Background Service",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps Bluetooth mesh communication active while screen is locked"
+                setShowBadge(false)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
+            }
+
+            // 1. Emergency Channel (High Priority, Loud Vibration, Public Lock Screen Visibility)
             val emergencyChannel = NotificationChannel(
                 EMERGENCY_CHANNEL_ID,
                 "Sahara Emergency Alerts",
@@ -66,16 +123,16 @@ class MainActivity : FlutterActivity() {
                 enableLights(true)
                 lightColor = Color.RED
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500, 200, 800)
                 setSound(soundUri, audioAttributes)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
 
-            // 2. Family Message Channel (Default Priority)
+            // 2. Family Message Channel (High Priority, Public Lock Screen Visibility)
             val familyChannel = NotificationChannel(
                 FAMILY_CHANNEL_ID,
                 "Sahara Family Messages",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Incoming offline mesh messages from family members"
                 enableLights(true)
@@ -83,11 +140,32 @@ class MainActivity : FlutterActivity() {
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 250, 150, 250)
                 setSound(soundUri, audioAttributes)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PRIVATE
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
 
+            // 3. Ping Alert Channel (High Priority, Public Lock Screen Visibility)
+            val pingChannel = NotificationChannel(
+                PING_CHANNEL_ID,
+                "Sahara Ping Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Radio connectivity check and peer ping alerts"
+                enableLights(true)
+                lightColor = Color.YELLOW
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 200, 100, 200)
+                setSound(soundUri, audioAttributes)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            }
+
+            notificationManager.createNotificationChannel(meshChannel)
+            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] CHANNEL_CREATED mesh_service")
             notificationManager.createNotificationChannel(emergencyChannel)
+            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] CHANNEL_CREATED emergency_alerts")
             notificationManager.createNotificationChannel(familyChannel)
+            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] CHANNEL_CREATED family_messages")
+            notificationManager.createNotificationChannel(pingChannel)
+            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] CHANNEL_CREATED ping_alerts")
         }
     }
 
@@ -120,6 +198,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] INITIALIZING")
         createNotificationChannels()
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
@@ -252,12 +331,42 @@ class MainActivity : FlutterActivity() {
                             result.success(true)
                         }
                     }
+                    "startMeshForegroundService" -> {
+                        SaharaMeshForegroundService.start(this@MainActivity)
+                        result.success(true)
+                    }
+                    "stopMeshForegroundService" -> {
+                        SaharaMeshForegroundService.stop(this@MainActivity)
+                        result.success(true)
+                    }
+                    "isScreenOff" -> {
+                        val isOff = SaharaMeshForegroundService.isScreenOff ||
+                            !SaharaMeshForegroundService.isDeviceInteractive(this@MainActivity)
+                        result.success(isOff)
+                    }
+                    "isDeviceLocked" -> {
+                        val locked = SaharaMeshForegroundService.isDeviceLocked(this@MainActivity)
+                        result.success(locked)
+                    }
                     "showEmergencyNotification" -> {
                         try {
                             val title = call.argument<String>("title") ?: "Emergency Alert"
                             val message = call.argument<String>("message") ?: ""
                             val severity = call.argument<String>("severity") ?: "warning"
                             val broadcastId = call.argument<String>("id") ?: "broadcast_${System.currentTimeMillis()}"
+
+                            val isBgOrLocked = SaharaMeshForegroundService.isScreenOff ||
+                                SaharaMeshForegroundService.isDeviceLocked(this@MainActivity) ||
+                                !SaharaMeshForegroundService.isDeviceInteractive(this@MainActivity)
+
+                            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] EMERGENCY_RECEIVED eventId=$broadcastId")
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] EMERGENCY_RECEIVED_BACKGROUND")
+                            }
+                            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] POSTING_EMERGENCY_NOTIFICATION")
+
+                            // Wake physical screen immediately for emergency
+                            SaharaMeshForegroundService.wakeScreen(this@MainActivity, 10000L)
 
                             val formattedTitle = when (severity.lowercase()) {
                                 "evacuation" -> "🚨 EVACUATION ALERT: $title"
@@ -267,7 +376,7 @@ class MainActivity : FlutterActivity() {
                             }
 
                             val intent = Intent(this@MainActivity, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                                 putExtra("action", "open_broadcast")
                                 putExtra("broadcastId", broadcastId)
                             }
@@ -275,6 +384,19 @@ class MainActivity : FlutterActivity() {
                                 this@MainActivity,
                                 broadcastId.hashCode(),
                                 intent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+
+                            // Full screen intent specifically designed to show over lock screen
+                            val fullScreenIntent = Intent(this@MainActivity, MainActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                putExtra("action", "open_broadcast")
+                                putExtra("broadcastId", broadcastId)
+                            }
+                            val fullScreenPendingIntent = PendingIntent.getActivity(
+                                this@MainActivity,
+                                broadcastId.hashCode() + 1,
+                                fullScreenIntent,
                                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                             )
 
@@ -286,22 +408,41 @@ class MainActivity : FlutterActivity() {
                                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                                 .setPriority(NotificationCompat.PRIORITY_MAX)
                                 .setCategory(NotificationCompat.CATEGORY_ALARM)
+                                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                                 .setAutoCancel(true)
                                 .setContentIntent(pendingIntent)
+                                .setFullScreenIntent(fullScreenPendingIntent, true)
                                 .setSound(soundUri)
-                                .setVibrate(longArrayOf(0, 500, 200, 500, 200, 500))
+                                .setVibrate(longArrayOf(0, 500, 200, 500, 200, 500, 200, 800))
 
-                            with(NotificationManagerCompat.from(this@MainActivity)) {
-                                if (ActivityCompat.checkSelfPermission(
-                                        this@MainActivity,
-                                        Manifest.permission.POST_NOTIFICATIONS
-                                    ) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
-                                ) {
-                                    notify(broadcastId.hashCode(), builder.build())
-                                }
+                            // Always trigger explicit hardware vibration
+                            triggerDeviceVibration(longArrayOf(0, 500, 200, 500, 200, 500, 200, 800))
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] VIBRATION_TRIGGERED_BACKGROUND")
+                            }
+
+                            val notifManager = NotificationManagerCompat.from(this@MainActivity)
+                            if (!notifManager.areNotificationsEnabled()) {
+                                Log.e("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_FAILED reason=NOTIFICATIONS_DISABLED_GLOBALLY")
+                                result.success(false)
+                                return@setMethodCallHandler
+                            }
+
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                Log.e("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_FAILED reason=POST_NOTIFICATIONS_PERMISSION_DENIED")
+                                result.success(false)
+                                return@setMethodCallHandler
+                            }
+
+                            notifManager.notify(broadcastId.hashCode(), builder.build())
+                            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_POSTED")
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] NOTIFICATION_POSTED_BACKGROUND")
                             }
                             result.success(true)
                         } catch (e: Exception) {
+                            Log.e("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_FAILED reason=${e.message}")
                             result.error("NOTIFICATION_ERROR", e.message, null)
                         }
                     }
@@ -312,8 +453,20 @@ class MainActivity : FlutterActivity() {
                             val personId = call.argument<String>("personId") ?: "family"
                             val notificationId = ("family_$personId").hashCode()
 
+                            val isBgOrLocked = SaharaMeshForegroundService.isScreenOff ||
+                                SaharaMeshForegroundService.isDeviceLocked(this@MainActivity) ||
+                                !SaharaMeshForegroundService.isDeviceInteractive(this@MainActivity)
+
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] PACKET_RECEIVED_BACKGROUND")
+                            }
+                            Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] POSTING_FAMILY_NOTIFICATION sender=$senderName")
+
+                            // Wake physical screen for family message
+                            SaharaMeshForegroundService.wakeScreen(this@MainActivity, 3000L)
+
                             val intent = Intent(this@MainActivity, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                                 putExtra("action", "open_chat")
                                 putExtra("personId", personId)
                             }
@@ -332,24 +485,112 @@ class MainActivity : FlutterActivity() {
                                 .setStyle(NotificationCompat.BigTextStyle().bigText(content))
                                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                                 .setAutoCancel(true)
                                 .setContentIntent(pendingIntent)
                                 .setSound(soundUri)
                                 .setVibrate(longArrayOf(0, 250, 150, 250))
 
-                            with(NotificationManagerCompat.from(this@MainActivity)) {
-                                if (ActivityCompat.checkSelfPermission(
-                                        this@MainActivity,
-                                        Manifest.permission.POST_NOTIFICATIONS
-                                    ) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
-                                ) {
-                                    notify(notificationId, builder.build())
+                            // Always trigger explicit hardware vibration
+                            triggerDeviceVibration(longArrayOf(0, 250, 150, 250))
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] VIBRATION_TRIGGERED_BACKGROUND")
+                            }
+
+                            val notifManager = NotificationManagerCompat.from(this@MainActivity)
+                            if (notifManager.areNotificationsEnabled()) {
+                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                    notifManager.notify(notificationId, builder.build())
+                                    Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_POSTED")
+                                    if (isBgOrLocked) {
+                                        Log.i("SAHARA-BG", "[SAHARA-BG] NOTIFICATION_POSTED_BACKGROUND")
+                                    }
+                                } else {
+                                    Log.w("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_FAILED reason=POST_NOTIFICATIONS_PERMISSION_DENIED")
                                 }
                             }
                             result.success(true)
                         } catch (e: Exception) {
+                            Log.e("SAHARA-NOTIFY", "[SAHARA-NOTIFY] NOTIFICATION_FAILED reason=${e.message}")
                             result.error("NOTIFICATION_ERROR", e.message, null)
                         }
+                    }
+                    "showPingNotification" -> {
+                        try {
+                            val senderName = call.argument<String>("senderName") ?: "Nearby Peer"
+                            val personId = call.argument<String>("personId") ?: "peer"
+                            val pingId = call.argument<String>("id") ?: "ping_${System.currentTimeMillis()}"
+                            val notificationId = ("ping_$personId").hashCode()
+
+                            val isBgOrLocked = SaharaMeshForegroundService.isScreenOff ||
+                                SaharaMeshForegroundService.isDeviceLocked(this@MainActivity) ||
+                                !SaharaMeshForegroundService.isDeviceInteractive(this@MainActivity)
+
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] PACKET_RECEIVED_BACKGROUND")
+                            }
+                            Log.i("SAHARA-PING", "[SAHARA-PING] RECEIVED id=$pingId")
+
+                            // Wake physical screen for ping
+                            SaharaMeshForegroundService.wakeScreen(this@MainActivity, 3000L)
+
+                            val intent = Intent(this@MainActivity, MainActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                putExtra("action", "open_chat")
+                                putExtra("personId", personId)
+                            }
+                            val pendingIntent = PendingIntent.getActivity(
+                                this@MainActivity,
+                                notificationId,
+                                intent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+
+                            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                            val builder = NotificationCompat.Builder(this@MainActivity, PING_CHANNEL_ID)
+                                .setSmallIcon(R.mipmap.ic_launcher)
+                                .setContentTitle("📡 Peer Ping Alert")
+                                .setContentText("$senderName pinged you to verify radio connectivity")
+                                .setStyle(NotificationCompat.BigTextStyle().bigText("$senderName is reachable within direct radio range."))
+                                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                .setCategory(NotificationCompat.CATEGORY_EVENT)
+                                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                                .setAutoCancel(true)
+                                .setContentIntent(pendingIntent)
+                                .setSound(soundUri)
+                                .setVibrate(longArrayOf(0, 200, 100, 200))
+
+                            // Always trigger explicit hardware vibration
+                            triggerDeviceVibration(longArrayOf(0, 200, 100, 200))
+                            Log.i("SAHARA-PING", "[SAHARA-PING] VIBRATION_TRIGGERED")
+                            if (isBgOrLocked) {
+                                Log.i("SAHARA-BG", "[SAHARA-BG] VIBRATION_TRIGGERED_BACKGROUND")
+                            }
+
+                            val notifManager = NotificationManagerCompat.from(this@MainActivity)
+                            if (notifManager.areNotificationsEnabled()) {
+                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                    notifManager.notify(notificationId, builder.build())
+                                    Log.i("SAHARA-PING", "[SAHARA-PING] NOTIFICATION_POSTED")
+                                    if (isBgOrLocked) {
+                                        Log.i("SAHARA-BG", "[SAHARA-BG] NOTIFICATION_POSTED_BACKGROUND")
+                                    }
+                                }
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            Log.e("SAHARA-PING", "[SAHARA-PING] FAILED: ${e.message}")
+                            result.error("PING_NOTIF_ERROR", e.message, null)
+                        }
+                    }
+                    "vibrateDevice" -> {
+                        val patternList = call.argument<List<Int>>("pattern")
+                        val pattern = patternList?.map { it.toLong() }?.toLongArray()
+                            ?: longArrayOf(0, 300, 150, 300)
+                        triggerDeviceVibration(pattern)
+                        result.success(true)
                     }
                     "getInitialNotification" -> {
                         val currentIntent = intent
@@ -395,6 +636,11 @@ class MainActivity : FlutterActivity() {
             val res = pendingNotificationPermResult ?: return
             pendingNotificationPermResult = null
             val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                Log.i("SAHARA-NOTIFY", "[SAHARA-NOTIFY] PERMISSION_GRANTED")
+            } else {
+                Log.w("SAHARA-NOTIFY", "[SAHARA-NOTIFY] PERMISSION_DENIED")
+            }
             res.success(granted)
         }
     }

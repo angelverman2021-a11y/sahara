@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/database_helper.dart';
@@ -48,11 +49,22 @@ class SaharaEmergencyService extends EmergencyService {
   final List<Person> _familyMembers = [];
   final Map<String, List<ui_msg.Message>> _conversationMessages = {};
   final List<EmergencyAnnouncement> _announcements = [];
+  final Set<String> _verifiedPeers = <String>{};
+  final Set<String> _processedEmergencyEventIds = <String>{};
+  final Set<String> _processedPingIds = <String>{};
+  final Set<String> _historyRequestedPeers = <String>{};
+  String? _activeChatPersonId;
+
+  @override
+  void setActiveChatPersonId(String? personId) {
+    _activeChatPersonId = personId;
+  }
 
   StreamSubscription<List<String>>? _peersSub;
   StreamSubscription<MessagePacket>? _messagesSub;
   StreamSubscription<MessagePacket>? _sosSub;
   StreamSubscription<MessagePacket>? _broadcastSub;
+  StreamSubscription<MessagePacket>? _pingSub;
 
   SaharaEmergencyService({
     DatabaseHelper? dbHelper,
@@ -94,7 +106,7 @@ class SaharaEmergencyService extends EmergencyService {
             id: id,
             name: id,
             relation: PersonRelation.nearby,
-            status: PersonStatus.unreachable,
+            status: _verifiedPeers.contains(id) ? PersonStatus.reachable : PersonStatus.unreachable,
             hops: 1,
             lastSeen: 'Recently',
             locationAvailable: false,
@@ -143,7 +155,27 @@ class SaharaEmergencyService extends EmergencyService {
 
   @override
   List<ui_msg.Message> getMessages(String personId) {
-    return _conversationMessages[personId] ?? [];
+    final direct = _conversationMessages[personId];
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final person = getPersonById(personId);
+    if (person != null) {
+      if (person.phoneNumber != null && _conversationMessages.containsKey(person.phoneNumber)) {
+        final msgs = _conversationMessages[person.phoneNumber];
+        if (msgs != null && msgs.isNotEmpty) return msgs;
+      }
+      if (person.id != personId && _conversationMessages.containsKey(person.id)) {
+        final msgs = _conversationMessages[person.id];
+        if (msgs != null && msgs.isNotEmpty) return msgs;
+      }
+    }
+
+    for (final entry in _conversationMessages.entries) {
+      if (entry.key.trim().toUpperCase() == personId.trim().toUpperCase()) {
+        return entry.value;
+      }
+    }
+    return [];
   }
 
   @override
@@ -156,14 +188,14 @@ class SaharaEmergencyService extends EmergencyService {
     }
     if (_transport is NearbyConnectionsTransport) {
       final name = (_transport as NearbyConnectionsTransport).discoveredNodeNames[id];
-      if (name != null && name.isNotEmpty) {
+      if (name != null && name.isNotEmpty && name != 'SAHARA User' && name != 'Sahara User') {
         return Person(
           id: id,
           name: name,
           relation: PersonRelation.nearby,
-          status: PersonStatus.reachable,
+          status: _verifiedPeers.contains(id) ? PersonStatus.reachable : PersonStatus.unreachable,
           hops: 1,
-          lastSeen: 'Just now',
+          lastSeen: 'Discovered',
           locationAvailable: true,
           lastKnownLocation: 'Nearby Radio Range',
         );
@@ -292,6 +324,9 @@ class SaharaEmergencyService extends EmergencyService {
     _conversationMessages.clear();
 
     for (final p in allMessages) {
+      if (p.type == MessageType.broadcast || p.type == MessageType.sos) {
+        _processedEmergencyEventIds.add(p.messageId);
+      }
       final isFromMe = p.senderId == _myUserId || p.senderNodeId == _myNodeId;
       final peerId = isFromMe ? p.receiverNodeId : p.senderNodeId;
       final senderName = isFromMe
@@ -364,27 +399,37 @@ class SaharaEmergencyService extends EmergencyService {
     ]);
 
     for (final r in storedReports) {
+      final repId = r['report_id'] as String;
+      _processedEmergencyEventIds.add(repId);
       final isEvac = (r['type'] as String? ?? '').contains('EVAC') ||
           (r['priority'] as String? ?? '') == 'Highest';
+      final src = (r['sender_name'] as String?)?.isNotEmpty == true
+          ? (r['sender_name'] as String)
+          : (r['sender_id'] as String? ?? 'Mesh Alert');
       _announcements.add(EmergencyAnnouncement(
-        id: r['report_id'] as String,
+        id: repId,
         title: r['type'] as String? ?? 'Emergency Alert',
         message: r['details'] as String? ?? '',
-        source: r['sender_id'] as String? ?? 'Mesh Alert',
+        source: src,
         timeAgo: 'Recently',
         severity: isEvac ? AnnouncementSeverity.evacuation : AnnouncementSeverity.warning,
         translations: BroadcastLocalizer.getTranslationsForComposed(
           title: r['type'] as String? ?? 'Emergency Alert',
           message: r['details'] as String? ?? '',
           severity: isEvac ? AnnouncementSeverity.evacuation : AnnouncementSeverity.warning,
-          source: r['sender_id'] as String? ?? 'Mesh Alert',
+          source: src,
         ),
       ));
     }
   }
 
   void _resolveAndCacheSenderName(String peerNodeId, String peerDisplayName) {
-    if (peerDisplayName.isEmpty || peerDisplayName == peerNodeId) return;
+    if (peerDisplayName.isEmpty ||
+        peerDisplayName == peerNodeId ||
+        peerDisplayName == 'SAHARA User' ||
+        peerDisplayName == 'Sahara User') {
+      return;
+    }
 
     bool changed = false;
     for (int i = 0; i < _nearbyPeople.length; i++) {
@@ -406,7 +451,7 @@ class SaharaEmergencyService extends EmergencyService {
     final msgs = _conversationMessages[peerNodeId];
     if (msgs != null) {
       for (int i = 0; i < msgs.length; i++) {
-        if (!msgs[i].isFromMe && (msgs[i].senderName == peerNodeId || msgs[i].senderName.isEmpty)) {
+        if (!msgs[i].isFromMe && (msgs[i].senderName == peerNodeId || msgs[i].senderName.isEmpty || msgs[i].senderName == 'SAHARA User')) {
           msgs[i] = msgs[i].copyWith(senderName: peerDisplayName);
           changed = true;
         }
@@ -417,7 +462,7 @@ class SaharaEmergencyService extends EmergencyService {
         'id': peerNodeId,
         'name': peerDisplayName,
         'relation': _familyMembers.any((f) => f.id == peerNodeId) ? 'family' : 'nearby',
-        'status': 'reachable',
+        'status': _verifiedPeers.contains(peerNodeId) ? 'reachable' : 'unreachable',
         'hops': 1,
         'last_seen': 'Just now',
         'location_available': 1,
@@ -433,26 +478,38 @@ class SaharaEmergencyService extends EmergencyService {
 
     // 1. Peer connection / disconnection changes
     _peersSub = _meshService!.onPeersChanged.listen((connectedNodeIds) {
+      debugPrint('[SAHARA SERVICE] onPeersChanged: connected=$connectedNodeIds, currentlyVerified=$_verifiedPeers');
+
+      for (final id in _verifiedPeers) {
+        if (!connectedNodeIds.contains(id)) {
+          debugPrint('[SAHARA-BG] CONNECTION_LOST_BACKGROUND peer=$id');
+        }
+      }
+
+      // Drop peers that have physically disconnected from verified list
+      _verifiedPeers.removeWhere((id) => !connectedNodeIds.contains(id));
+      _historyRequestedPeers.removeWhere((id) => !connectedNodeIds.contains(id));
+
       _meshStatus = _meshStatus.copyWith(
-        nearbyCount: connectedNodeIds.length,
-        isMeshActive: true,
+        nearbyCount: _verifiedPeers.length,
+        isMeshActive: connectedNodeIds.isNotEmpty,
         activeRelays: connectedNodeIds.length,
       );
 
-      // Update reachable statuses
+      // Update reachable statuses: ONLY verified peers show as reachable in UI
       for (int i = 0; i < _nearbyPeople.length; i++) {
-        final isConnected = connectedNodeIds.contains(_nearbyPeople[i].id);
+        final isVerified = _verifiedPeers.contains(_nearbyPeople[i].id);
         _nearbyPeople[i] = _nearbyPeople[i].copyWith(
-          status: isConnected ? PersonStatus.reachable : PersonStatus.unreachable,
-          lastSeen: isConnected ? 'Just now' : _nearbyPeople[i].lastSeen,
+          status: isVerified ? PersonStatus.reachable : PersonStatus.unreachable,
+          lastSeen: isVerified ? 'Just now' : _nearbyPeople[i].lastSeen,
         );
       }
 
       for (int i = 0; i < _familyMembers.length; i++) {
-        final isConnected = connectedNodeIds.contains(_familyMembers[i].id);
+        final isVerified = _verifiedPeers.contains(_familyMembers[i].id);
         _familyMembers[i] = _familyMembers[i].copyWith(
-          status: isConnected ? PersonStatus.reachable : PersonStatus.unreachable,
-          lastSeen: isConnected ? 'Just now' : _familyMembers[i].lastSeen,
+          status: isVerified ? PersonStatus.reachable : PersonStatus.unreachable,
+          lastSeen: isVerified ? 'Just now' : _familyMembers[i].lastSeen,
         );
       }
 
@@ -462,23 +519,27 @@ class SaharaEmergencyService extends EmergencyService {
           final discoveredName = (_transport is NearbyConnectionsTransport)
               ? (_transport as NearbyConnectionsTransport).discoveredNodeNames[peerId]
               : null;
-          final displayName = (discoveredName != null && discoveredName.isNotEmpty)
+          final displayName = (discoveredName != null &&
+                  discoveredName.isNotEmpty &&
+                  discoveredName != 'SAHARA User' &&
+                  discoveredName != 'Sahara User')
               ? discoveredName
               : peerId;
+
           _nearbyPeople.add(Person(
             id: peerId,
             name: displayName,
             relation: PersonRelation.nearby,
-            status: PersonStatus.reachable,
+            status: _verifiedPeers.contains(peerId) ? PersonStatus.reachable : PersonStatus.unreachable,
             hops: 1,
-            lastSeen: 'Just now',
+            lastSeen: 'Discovered',
             locationAvailable: true,
             lastKnownLocation: 'Nearby Radio Range',
           ));
         }
 
-        // Send handshake packet to newly connected peers so they know our user info
-        _sendPeerHandshake(peerId);
+        // Send application-level HANDSHAKE_INIT to verify bidirectional data path and exchange identity
+        _sendPeerHandshakeInit(peerId);
       }
 
       notifyListeners();
@@ -486,21 +547,48 @@ class SaharaEmergencyService extends EmergencyService {
 
     // 2. Incoming messages
     _messagesSub = _meshService!.onMessageReceived.listen((packet) async {
-      // Check if this is an internal handshake packet
-      if (packet.type == 'STATUS' || packet.type == 'HANDSHAKE') {
+      debugPrint('[SAHARA SERVICE] onMessageReceived: id=${packet.messageId}, type=${packet.type}, fromNode=${packet.senderNodeId}, fromUser=${packet.senderId}');
+      debugPrint('[SAHARA-BG] PACKET_RECEIVED_BACKGROUND id=${packet.messageId} type=${packet.type}');
+
+      // Check if this is an internal handshake/status/profile packet
+      if (packet.type == 'STATUS' ||
+          packet.type == 'HANDSHAKE' ||
+          packet.type == 'HANDSHAKE_INIT' ||
+          packet.type == 'HANDSHAKE_ACK' ||
+          packet.type == 'PROFILE_UPDATE') {
         _handlePeerHandshakePacket(packet);
         return;
       }
 
-      // Standard text message
-      await db.insertMessage(packet);
+      if (packet.type == 'HISTORY_REQUEST') {
+        _handleHistoryRequest(packet);
+        return;
+      }
 
-      if (packet.senderName != null && packet.senderName!.isNotEmpty && packet.senderName != packet.senderNodeId) {
+      if (packet.type == 'HISTORY_RESPONSE') {
+        _handleHistoryResponse(packet);
+        return;
+      }
+
+      // Standard text message: Persist safely to SQLite
+      try {
+        await db.insertMessage(packet);
+      } catch (e) {
+        debugPrint('[SAHARA DB] Error inserting incoming message: $e');
+      }
+
+      if (packet.senderName != null &&
+          packet.senderName!.isNotEmpty &&
+          packet.senderName != packet.senderNodeId &&
+          packet.senderName != 'SAHARA User' &&
+          packet.senderName != 'Sahara User') {
         _resolveAndCacheSenderName(packet.senderNodeId, packet.senderName!);
       }
 
       final senderName = getPersonById(packet.senderNodeId)?.name ??
-          (packet.senderName != null && packet.senderName!.isNotEmpty ? packet.senderName! : packet.senderNodeId);
+          (packet.senderName != null && packet.senderName!.isNotEmpty && packet.senderName != 'SAHARA User'
+              ? packet.senderName!
+              : packet.senderNodeId);
 
       final uiMessage = ui_msg.Message(
         id: packet.messageId,
@@ -516,108 +604,144 @@ class SaharaEmergencyService extends EmergencyService {
         hops: 8 - packet.ttl,
       );
 
+      // Index under senderNodeId as well as senderId/user_id for seamless chat lookup
       _conversationMessages.putIfAbsent(packet.senderNodeId, () => []).add(uiMessage);
+      if (packet.senderId.isNotEmpty && packet.senderId != packet.senderNodeId) {
+        _conversationMessages.putIfAbsent(packet.senderId, () => []).add(uiMessage);
+      }
       notifyListeners();
 
       final isFamily = _familyMembers.any((f) =>
           f.id == packet.senderNodeId ||
           f.id == packet.senderId ||
-          (f.phoneNumber != null && f.phoneNumber!.isNotEmpty && f.phoneNumber == packet.senderId));
-      if (isFamily) {
-        NotificationService().showFamilyMessageNotification(
+          (f.phoneNumber != null && f.phoneNumber!.isNotEmpty && f.phoneNumber == packet.senderId) ||
+          (f.name.trim().isNotEmpty && f.name.trim().toLowerCase() == senderName.trim().toLowerCase()));
+
+      final isCurrentlyViewingChat = _activeChatPersonId != null &&
+          (_activeChatPersonId == packet.senderNodeId ||
+           _activeChatPersonId == packet.senderId ||
+           _activeChatPersonId == senderName);
+
+      if (isFamily && !isCurrentlyViewingChat) {
+        debugPrint('[SAHARA-NOTIFY] POSTING_FAMILY_NOTIFICATION sender=$senderName');
+        await NotificationService().showFamilyMessageNotification(
           senderName: senderName,
           content: packet.content,
           personId: packet.senderNodeId,
         );
+        debugPrint('[SAHARA-NOTIFY] VIBRATION_TRIGGERED');
+        debugPrint('[SAHARA-NOTIFY] NOTIFICATION_POSTED');
       }
     });
 
     // 3. High-priority SOS received
     _sosSub = _meshService!.onSosReceived.listen((packet) async {
-      await db.insertMessage(packet);
-      await db.insertEmergencyReport({
-        'report_id': packet.messageId,
-        'sender_id': packet.senderId,
-        'type': 'SOS',
-        'priority': 'Highest',
-        'details': packet.content,
-        'timestamp': packet.timestamp,
-        'status': 'PENDING',
-      });
+      debugPrint('[SAHARA SERVICE] onSosReceived: id=${packet.messageId}, from=${packet.senderNodeId}');
+      debugPrint('[SAHARA-BG] PACKET_RECEIVED_BACKGROUND id=${packet.messageId} type=SOS');
+      debugPrint('[SAHARA-BG] EMERGENCY_RECEIVED_BACKGROUND id=${packet.messageId}');
+      try {
+        await db.insertMessage(packet);
+        await db.insertEmergencyReport({
+          'report_id': packet.messageId,
+          'sender_id': packet.senderId,
+          'type': 'SOS',
+          'priority': 'Highest',
+          'details': packet.content,
+          'timestamp': packet.timestamp,
+          'status': 'PENDING',
+          'sender_name': packet.senderName ?? packet.senderNodeId,
+        });
+      } catch (e) {
+        debugPrint('[SAHARA DB] Error persisting SOS alert: $e');
+      }
 
-      _meshStatus = _meshStatus.copyWith(isBroadcastingSOS: true);
-
-      if (packet.senderName != null && packet.senderName!.isNotEmpty && packet.senderName != packet.senderNodeId) {
+      if (packet.senderName != null &&
+          packet.senderName!.isNotEmpty &&
+          packet.senderName != packet.senderNodeId &&
+          packet.senderName != 'SAHARA User') {
         _resolveAndCacheSenderName(packet.senderNodeId, packet.senderName!);
       }
       final sourceName = getPersonById(packet.senderNodeId)?.name ??
           (packet.senderName != null && packet.senderName!.isNotEmpty ? packet.senderName! : packet.senderNodeId);
 
-      final announcement = EmergencyAnnouncement(
-        id: packet.messageId,
-        title: 'DISTRESS SOS ALERT',
-        message: packet.content,
-        source: sourceName,
-        timeAgo: 'Just now',
-        severity: AnnouncementSeverity.evacuation,
-        translations: BroadcastLocalizer.getTranslationsForComposed(
-          title: 'DISTRESS SOS ALERT',
-          message: packet.content,
-          severity: AnnouncementSeverity.evacuation,
-          source: sourceName,
-        ),
-      );
-
-      _announcements.insert(0, announcement);
-      notifyListeners();
-
-      NotificationService().showEmergencyBroadcastNotification(
+      await handleEmergencyEvent(
+        eventId: packet.messageId,
         title: 'DISTRESS SOS ALERT',
         message: packet.content,
         severity: AnnouncementSeverity.evacuation,
-        id: packet.messageId,
+        sourceName: sourceName,
+        isLive: true,
       );
     });
 
     // 4. Emergency Broadcast received
     _broadcastSub = _meshService!.onBroadcastReceived.listen((packet) async {
-      await db.insertMessage(packet);
+      debugPrint('[SAHARA SERVICE] onBroadcastReceived: id=${packet.messageId}, content=${packet.content}, from=${packet.senderNodeId}');
+      debugPrint('[SAHARA-BG] PACKET_RECEIVED_BACKGROUND id=${packet.messageId} type=BROADCAST');
+      debugPrint('[SAHARA-BG] EMERGENCY_RECEIVED_BACKGROUND id=${packet.messageId}');
+      try {
+        await db.insertMessage(packet);
+        await db.insertEmergencyReport({
+          'report_id': packet.messageId,
+          'sender_id': packet.senderId,
+          'type': 'BROADCAST',
+          'priority': 'High',
+          'details': packet.content,
+          'timestamp': packet.timestamp,
+          'status': 'DELIVERED',
+          'sender_name': packet.senderName ?? packet.senderNodeId,
+        });
+      } catch (e) {
+        debugPrint('[SAHARA DB] Error persisting broadcast: $e');
+      }
 
-      if (packet.senderName != null && packet.senderName!.isNotEmpty && packet.senderName != packet.senderNodeId) {
+      if (packet.senderName != null &&
+          packet.senderName!.isNotEmpty &&
+          packet.senderName != packet.senderNodeId &&
+          packet.senderName != 'SAHARA User') {
         _resolveAndCacheSenderName(packet.senderNodeId, packet.senderName!);
       }
       final sourceName = getPersonById(packet.senderNodeId)?.name ??
           (packet.senderName != null && packet.senderName!.isNotEmpty ? packet.senderName! : packet.senderNodeId);
 
-      final announcement = EmergencyAnnouncement(
-        id: packet.messageId,
-        title: 'EMERGENCY BROADCAST',
-        message: packet.content,
-        source: sourceName,
-        timeAgo: 'Just now',
-        severity: AnnouncementSeverity.warning,
-        translations: BroadcastLocalizer.getTranslationsForComposed(
-          title: 'EMERGENCY BROADCAST',
-          message: packet.content,
-          severity: AnnouncementSeverity.warning,
-          source: sourceName,
-        ),
-      );
-
-      _announcements.insert(0, announcement);
-      notifyListeners();
-
-      NotificationService().showEmergencyBroadcastNotification(
+      await handleEmergencyEvent(
+        eventId: packet.messageId,
         title: 'EMERGENCY BROADCAST',
         message: packet.content,
         severity: AnnouncementSeverity.warning,
+        sourceName: sourceName,
+        isLive: true,
+      );
+    });
+
+    // 5. Peer Ping check received
+    _pingSub = _meshService!.onPingReceived.listen((packet) async {
+      debugPrint('[SAHARA-BG] PACKET_RECEIVED_BACKGROUND id=${packet.messageId} type=PING');
+      debugPrint('[SAHARA-PING] RECEIVED id=${packet.messageId} from=${packet.senderName ?? packet.senderNodeId}');
+      if (_processedPingIds.contains(packet.messageId)) {
+        return;
+      }
+      _processedPingIds.add(packet.messageId);
+      if (_processedPingIds.length > 200) {
+        _processedPingIds.remove(_processedPingIds.first);
+      }
+
+      final pingSender = (packet.senderName != null && packet.senderName!.isNotEmpty && packet.senderName != 'SAHARA User')
+          ? packet.senderName!
+          : (getPersonById(packet.senderNodeId)?.name ?? packet.senderNodeId);
+
+      await NotificationService().showPingNotification(
+        senderName: pingSender,
+        personId: packet.senderNodeId,
         id: packet.messageId,
       );
+      debugPrint('[SAHARA-PING] NOTIFICATION_POSTED');
+      debugPrint('[SAHARA-PING] VIBRATION_TRIGGERED');
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Bluetooth Discovery & Handshake Protocol
+  // Bluetooth Discovery & Application-Level Handshake Protocol
   // ---------------------------------------------------------------------------
 
   Future<void> _initBluetoothAndMesh() async {
@@ -631,6 +755,10 @@ class SaharaEmergencyService extends EmergencyService {
       await NativeBridge.enableBluetooth();
     }
 
+    // Launch Android Foreground Service for locked-screen mesh survival
+    await NativeBridge.startMeshForegroundService();
+    debugPrint('[SAHARA-BG] MESH_LISTENER_ACTIVE service started');
+
     try {
       await _meshService?.start();
       _meshStatus = _meshStatus.copyWith(isMeshActive: true);
@@ -639,56 +767,175 @@ class SaharaEmergencyService extends EmergencyService {
     }
   }
 
-  Future<void> _sendPeerHandshake(String peerNodeId) async {
+  /// Sends application-level HANDSHAKE_INIT with challenge nonce to verify the data transport
+  Future<void> _sendPeerHandshakeInit(String peerNodeId) async {
     try {
-      final myName = _userProfile?.fullName ?? '';
+      final myName = _userProfile?.fullName.trim() ?? '';
+      final nonce = Random().nextInt(0x7FFFFFFF).toString();
       final payload = jsonEncode({
-        'name': myName.isNotEmpty ? myName : 'SAHARA User',
+        'type': 'HANDSHAKE_INIT',
+        'name': myName,
         'phone': _userProfile?.phoneNumber ?? '',
         'user_id': _myUserId,
         'node_id': _myNodeId,
+        'nonce': nonce,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
 
       final handshakePacket = MessagePacket(
-        messageId: 'HS_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}',
+        messageId: 'HS_INIT_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}',
         senderId: _myUserId,
         receiverId: peerNodeId,
         senderNodeId: _myNodeId,
         receiverNodeId: peerNodeId,
-        type: 'STATUS',
-        priority: MessagePriority.normal,
+        type: 'HANDSHAKE_INIT',
+        priority: MessagePriority.highest,
         content: payload,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         ttl: 1,
         status: MessageStatus.delivered,
-        senderName: myName.isNotEmpty ? myName : 'SAHARA User',
+        senderName: myName,
       );
 
+      debugPrint('[SAHARA HANDSHAKE] Sending HANDSHAKE_INIT to $peerNodeId (nonce=$nonce, name="$myName")...');
       await _transport?.sendRawPacket(peerNodeId, handshakePacket.toUtf8Bytes());
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SAHARA HANDSHAKE] Error sending HANDSHAKE_INIT to $peerNodeId: $e');
+    }
+  }
+
+  /// Sends application-level HANDSHAKE_ACK echoing the peer's nonce to confirm verified connectivity
+  Future<void> _sendPeerHandshakeAck(String peerNodeId, String peerNonce) async {
+    try {
+      final myName = _userProfile?.fullName.trim() ?? '';
+      final payload = jsonEncode({
+        'type': 'HANDSHAKE_ACK',
+        'name': myName,
+        'phone': _userProfile?.phoneNumber ?? '',
+        'user_id': _myUserId,
+        'node_id': _myNodeId,
+        'ack_nonce': peerNonce,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      final ackPacket = MessagePacket(
+        messageId: 'HS_ACK_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}',
+        senderId: _myUserId,
+        receiverId: peerNodeId,
+        senderNodeId: _myNodeId,
+        receiverNodeId: peerNodeId,
+        type: 'HANDSHAKE_ACK',
+        priority: MessagePriority.highest,
+        content: payload,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        ttl: 1,
+        status: MessageStatus.delivered,
+        senderName: myName,
+      );
+
+      debugPrint('[SAHARA HANDSHAKE] Sending HANDSHAKE_ACK to $peerNodeId (ackNonce=$peerNonce, name="$myName")...');
+      await _transport?.sendRawPacket(peerNodeId, ackPacket.toUtf8Bytes());
+    } catch (e) {
+      debugPrint('[SAHARA HANDSHAKE] Error sending HANDSHAKE_ACK to $peerNodeId: $e');
+    }
+  }
+
+  /// Broadcasts profile changes across all verified peers so names update immediately without reconnect
+  Future<void> _broadcastProfileUpdate() async {
+    final myName = _userProfile?.fullName.trim() ?? '';
+    if (myName.isEmpty || _meshService == null) return;
+
+    final payload = jsonEncode({
+      'type': 'PROFILE_UPDATE',
+      'name': myName,
+      'phone': _userProfile?.phoneNumber ?? '',
+      'user_id': _myUserId,
+      'node_id': _myNodeId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+
+    final updatePacket = MessagePacket(
+      messageId: 'PROF_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}',
+      senderId: _myUserId,
+      receiverId: 'BROADCAST',
+      senderNodeId: _myNodeId,
+      receiverNodeId: 'BROADCAST',
+      type: 'PROFILE_UPDATE',
+      priority: MessagePriority.normal,
+      content: payload,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      ttl: 2,
+      status: MessageStatus.delivered,
+      senderName: myName,
+    );
+
+    debugPrint('[SAHARA PROFILE] Broadcasting PROFILE_UPDATE across mesh (newName="$myName")...');
+    for (final peerId in _verifiedPeers) {
+      try {
+        await _transport?.sendRawPacket(peerId, updatePacket.toUtf8Bytes());
+      } catch (_) {}
+    }
   }
 
   void _handlePeerHandshakePacket(MessagePacket packet) {
     try {
+      debugPrint('[SAHARA HANDSHAKE] Received system packet: type=${packet.type}, from=${packet.senderNodeId}');
       final data = jsonDecode(packet.content) as Map<String, dynamic>;
-      final peerName = data['name'] as String? ?? packet.senderName ?? packet.senderNodeId;
-      final peerPhone = data['phone'] as String? ?? '';
-      final peerUserId = data['user_id'] as String? ?? packet.senderId;
-      final peerNodeId = packet.senderNodeId;
+      final packetType = data['type'] as String? ?? packet.type;
+      final rawPeerName = (data['name'] as String? ?? packet.senderName ?? '').trim();
+      final peerPhone = (data['phone'] as String? ?? '').trim();
+      final peerUserId = (data['user_id'] as String? ?? packet.senderId).trim();
+      final peerNodeId = packet.senderNodeId.trim();
 
-      final resolvedName = (peerName.isNotEmpty && peerName != peerNodeId)
-          ? peerName
-          : (packet.senderName != null && packet.senderName!.isNotEmpty && packet.senderName != peerNodeId
-              ? packet.senderName!
-              : peerNodeId);
+      // Resolve human display name (never accept generic fallback if real name or better identifier exists)
+      String resolvedName = rawPeerName;
+      if (resolvedName.isEmpty || resolvedName == 'SAHARA User' || resolvedName == 'Sahara User') {
+        final cached = getPersonById(peerNodeId)?.name;
+        if (cached != null &&
+            cached.isNotEmpty &&
+            cached != 'SAHARA User' &&
+            cached != 'Sahara User' &&
+            !cached.startsWith('NODE_')) {
+          resolvedName = cached;
+        } else if (peerPhone.isNotEmpty) {
+          resolvedName = peerPhone;
+        } else {
+          resolvedName = peerNodeId;
+        }
+      }
 
-      _resolveAndCacheSenderName(peerNodeId, resolvedName);
+      // Mark this peer as VERIFIED CONNECTED at the application level
+      _verifiedPeers.add(peerNodeId);
+      _meshStatus = _meshStatus.copyWith(
+        nearbyCount: _verifiedPeers.length,
+        isMeshActive: true,
+      );
+
+      // If it was an INIT packet, send back an ACK immediately!
+      if (packetType == 'HANDSHAKE_INIT') {
+        final nonce = data['nonce'] as String? ?? '';
+        debugPrint('[SAHARA HANDSHAKE] Verified INIT from $peerNodeId ("$resolvedName"). Sending ACK...');
+        _sendPeerHandshakeAck(peerNodeId, nonce);
+      } else if (packetType == 'HANDSHAKE_ACK') {
+        debugPrint('[SAHARA HANDSHAKE] Verified ACK received from $peerNodeId ("$resolvedName"). Bidirectional verification COMPLETE!');
+      }
+
+      // Automatically request existing emergency broadcast history from peer
+      if (!_historyRequestedPeers.contains(peerNodeId)) {
+        _historyRequestedPeers.add(peerNodeId);
+        _sendHistoryRequest(peerNodeId, peerUserId);
+      }
+
+      // Update name in cache, memory lists, and contacts
+      if (resolvedName != peerNodeId) {
+        _resolveAndCacheSenderName(peerNodeId, resolvedName);
+      }
 
       final existingFamIdx = _familyMembers.indexWhere((f) =>
           f.id == peerNodeId || f.id == peerUserId || (peerPhone.isNotEmpty && f.phoneNumber == peerPhone));
       if (existingFamIdx >= 0) {
         _familyMembers[existingFamIdx] = _familyMembers[existingFamIdx].copyWith(
-          name: resolvedName,
+          name: resolvedName != peerNodeId ? resolvedName : _familyMembers[existingFamIdx].name,
           status: PersonStatus.reachable,
           lastSeen: 'Just now',
           phoneNumber: peerPhone.isNotEmpty ? peerPhone : _familyMembers[existingFamIdx].phoneNumber,
@@ -715,23 +962,239 @@ class SaharaEmergencyService extends EmergencyService {
         _nearbyPeople.add(person);
       }
 
-      // Persist contact in SQLite
-      db.insertOrUpdateContact({
-        'id': peerNodeId,
-        'name': resolvedName,
-        'relation': existingFamIdx >= 0 ? 'family' : 'nearby',
-        'status': 'reachable',
-        'hops': 1,
-        'last_seen': 'Just now',
-        'location_available': 1,
-        'last_known_location': 'Nearby Radio Range',
-        'phone_number': peerPhone,
-        'user_id': peerUserId,
-        'node_id': peerNodeId,
-      });
+      // Persist contact in SQLite safely
+      try {
+        db.insertOrUpdateContact({
+          'id': peerNodeId,
+          'name': resolvedName,
+          'relation': existingFamIdx >= 0 ? 'family' : 'nearby',
+          'status': 'reachable',
+          'hops': 1,
+          'last_seen': 'Just now',
+          'location_available': 1,
+          'last_known_location': 'Nearby Radio Range',
+          'phone_number': peerPhone,
+          'user_id': peerUserId,
+          'node_id': peerNodeId,
+        });
+      } catch (e) {
+        debugPrint('[SAHARA DB] Error updating contact: $e');
+      }
 
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SAHARA HANDSHAKE] Error handling handshake packet: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Emergency Alert & History Sync Protocol
+  // ---------------------------------------------------------------------------
+
+  /// Centralized emergency alert handler with deduplication.
+  /// When [isLive] is true (live incoming SOS or broadcast, or sender's own broadcast),
+  /// triggers native heads-up notification and direct hardware vibration.
+  Future<void> handleEmergencyEvent({
+    required String eventId,
+    required String title,
+    required String message,
+    required AnnouncementSeverity severity,
+    required String sourceName,
+    required bool isLive,
+    String? coordinates,
+  }) async {
+    if (_processedEmergencyEventIds.contains(eventId)) {
+      debugPrint('[SAHARA-NOTIFY] EVENT_DUPLICATE_DROPPED id=$eventId');
+      return;
+    }
+    _processedEmergencyEventIds.add(eventId);
+
+    final announcement = EmergencyAnnouncement(
+      id: eventId,
+      title: title,
+      message: message,
+      source: sourceName,
+      timeAgo: 'Just now',
+      severity: severity,
+      translations: BroadcastLocalizer.getTranslationsForComposed(
+        title: title,
+        message: message,
+        severity: severity,
+        source: sourceName,
+      ),
+    );
+
+    _announcements.insert(0, announcement);
+    notifyListeners();
+
+    if (isLive) {
+      debugPrint('[SAHARA-NOTIFY] POSTING_EMERGENCY_NOTIFICATION id=$eventId title="$title" source="$sourceName"');
+      await NotificationService().showEmergencyBroadcastNotification(
+        title: title,
+        message: message,
+        severity: severity,
+        id: eventId,
+      );
+      debugPrint('[SAHARA-NOTIFY] NOTIFICATION_POSTED');
+      debugPrint('[SAHARA-NOTIFY] VIBRATION_TRIGGERED');
+    }
+  }
+
+  /// Sends HISTORY_REQUEST to a connected peer to synchronize past emergency broadcasts.
+  Future<void> _sendHistoryRequest(String peerNodeId, String peerUserId) async {
+    try {
+      debugPrint('[SAHARA-HISTORY] REQUEST_SENT target=$peerNodeId');
+      final payload = jsonEncode({
+        'type': 'HISTORY_REQUEST',
+        'requester_node_id': _myNodeId,
+        'requester_user_id': _myUserId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      await _meshService?.sendDirectMessage(
+        receiverNodeId: peerNodeId,
+        receiverUserId: peerUserId,
+        content: payload,
+        type: MessageType.historyRequest,
+        priority: MessagePriority.high,
+      );
+    } catch (e) {
+      debugPrint('[SAHARA-HISTORY] Error sending HISTORY_REQUEST to $peerNodeId: $e');
+    }
+  }
+
+  /// Handles incoming HISTORY_REQUEST by querying local emergency history and sending HISTORY_RESPONSE.
+  Future<void> _handleHistoryRequest(MessagePacket packet) async {
+    try {
+      debugPrint('[SAHARA-HISTORY] REQUEST_RECEIVED from=${packet.senderNodeId}');
+      final historyPackets = await db.getEmergencyBroadcastHistory(limit: 50);
+      debugPrint('[SAHARA-HISTORY] Found ${historyPackets.length} historical emergency events to share');
+
+      final historyList = historyPackets.map((p) => p.toJson()).toList();
+
+      final payload = jsonEncode({
+        'type': 'HISTORY_RESPONSE',
+        'responder_node_id': _myNodeId,
+        'responder_user_id': _myUserId,
+        'events': historyList,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      await _meshService?.sendDirectMessage(
+        receiverNodeId: packet.senderNodeId,
+        receiverUserId: packet.senderId,
+        content: payload,
+        type: MessageType.historyResponse,
+        priority: MessagePriority.high,
+      );
+      debugPrint('[SAHARA-HISTORY] RESPONSE_SENT to=${packet.senderNodeId} count=${historyList.length}');
+    } catch (e) {
+      debugPrint('[SAHARA-HISTORY] Error handling HISTORY_REQUEST: $e');
+    }
+  }
+
+  /// Handles incoming HISTORY_RESPONSE by persisting new historical broadcasts into SQLite
+  /// and displaying them in UI, strictly suppressing any sound or vibration alert.
+  Future<void> _handleHistoryResponse(MessagePacket packet) async {
+    try {
+      debugPrint('[SAHARA-HISTORY] RESPONSE_RECEIVED from=${packet.senderNodeId}');
+      final data = jsonDecode(packet.content) as Map<String, dynamic>;
+      final rawEvents = data['events'] as List<dynamic>? ?? [];
+      debugPrint('[SAHARA-HISTORY] Received ${rawEvents.length} events in history response');
+
+      int addedCount = 0;
+      for (final raw in rawEvents) {
+        if (raw is! Map<String, dynamic>) continue;
+        final messageId = raw['message_id'] as String? ?? '';
+        if (messageId.isEmpty) continue;
+
+        if (_processedEmergencyEventIds.contains(messageId)) {
+          debugPrint('[SAHARA-HISTORY] EVENT_DUPLICATE_IGNORED id=$messageId');
+          continue;
+        }
+        _processedEmergencyEventIds.add(messageId);
+
+        final senderId = raw['sender_id'] as String? ?? '';
+        final senderNodeId = raw['sender_node_id'] as String? ?? '';
+        final senderName = (raw['sender_name'] as String?)?.isNotEmpty == true
+            ? raw['sender_name'] as String
+            : (senderNodeId.isNotEmpty ? senderNodeId : 'Mesh Alert');
+        final content = raw['content'] as String? ?? '';
+        final eventType = raw['type'] as String? ?? 'BROADCAST';
+        final timestampMs = raw['timestamp'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+        final eventTime = DateTime.fromMillisecondsSinceEpoch(timestampMs);
+
+        final isSos = eventType == 'SOS';
+        final isEvac = isSos || content.toUpperCase().contains('EVAC');
+
+        final historyPacket = MessagePacket(
+          messageId: messageId,
+          senderId: senderId,
+          receiverId: 'BROADCAST',
+          senderNodeId: senderNodeId,
+          receiverNodeId: 'BROADCAST',
+          type: eventType,
+          priority: isSos ? MessagePriority.highest : MessagePriority.high,
+          content: content,
+          timestamp: timestampMs,
+          ttl: 8,
+          status: MessageStatus.delivered,
+          senderName: senderName,
+        );
+
+        try {
+          await db.insertMessage(historyPacket);
+          await db.insertEmergencyReport({
+            'report_id': messageId,
+            'sender_id': senderId,
+            'type': eventType,
+            'priority': isSos ? 'Highest' : 'High',
+            'details': content,
+            'timestamp': timestampMs,
+            'status': 'DELIVERED',
+            'sender_name': senderName,
+          });
+        } catch (e) {
+          debugPrint('[SAHARA DB] Error inserting historical event: $e');
+        }
+
+        final diff = DateTime.now().difference(eventTime);
+        final String timeAgoStr;
+        if (diff.inDays > 0) {
+          timeAgoStr = '${diff.inDays}d ago';
+        } else if (diff.inHours > 0) {
+          timeAgoStr = '${diff.inHours}h ago';
+        } else if (diff.inMinutes > 0) {
+          timeAgoStr = '${diff.inMinutes}m ago';
+        } else {
+          timeAgoStr = 'Recently';
+        }
+
+        _announcements.add(EmergencyAnnouncement(
+          id: messageId,
+          title: isSos ? 'DISTRESS SOS ALERT' : 'EMERGENCY BROADCAST',
+          message: content,
+          source: senderName,
+          timeAgo: timeAgoStr,
+          severity: isEvac ? AnnouncementSeverity.evacuation : AnnouncementSeverity.warning,
+          translations: BroadcastLocalizer.getTranslationsForComposed(
+            title: isSos ? 'DISTRESS SOS ALERT' : 'EMERGENCY BROADCAST',
+            message: content,
+            severity: isEvac ? AnnouncementSeverity.evacuation : AnnouncementSeverity.warning,
+            source: senderName,
+          ),
+        ));
+        addedCount++;
+        debugPrint('[SAHARA-HISTORY] EVENT_MERGED id=$messageId from="$senderName"');
+      }
+
+      if (addedCount > 0) {
+        notifyListeners();
+      }
+      debugPrint('[SAHARA-HISTORY] SYNC_COMPLETE merged=$addedCount events');
+    } catch (e) {
+      debugPrint('[SAHARA-HISTORY] Error handling HISTORY_RESPONSE: $e');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -748,7 +1211,18 @@ class SaharaEmergencyService extends EmergencyService {
     if (trimmed.isEmpty || _meshService == null) return;
 
     final person = getPersonById(receiverId);
-    final targetNodeId = receiverId;
+
+    // Resolve target physical node_id
+    String targetNodeId = receiverId;
+    if (!targetNodeId.toUpperCase().startsWith('NODE_')) {
+      for (final p in allKnownPeople) {
+        if ((p.id == receiverId || p.phoneNumber == receiverId) && p.id.toUpperCase().startsWith('NODE_')) {
+          targetNodeId = p.id;
+          break;
+        }
+      }
+    }
+
     final targetUserId = person?.phoneNumber ?? receiverId;
 
     String packetPriority = MessagePriority.normal;
@@ -760,8 +1234,7 @@ class SaharaEmergencyService extends EmergencyService {
 
     final packetId = 'MSG_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
     final now = DateTime.now();
-
-    final myName = _userProfile?.fullName ?? 'You';
+    final myName = _userProfile?.fullName.trim() ?? 'You';
 
     final packet = MessagePacket(
       messageId: packetId,
@@ -778,10 +1251,10 @@ class SaharaEmergencyService extends EmergencyService {
       senderName: myName,
     );
 
-    // Save to SQLite
-    await db.insertMessage(packet);
+    // 1. Instantly update UI optimistically for sender
+    final isDeliveredNow = _verifiedPeers.contains(targetNodeId) ||
+        (_meshService != null && _meshService!.connectedPeers.contains(targetNodeId));
 
-    // Add to UI state
     final uiMessage = ui_msg.Message(
       id: packetId,
       senderId: _myUserId,
@@ -791,25 +1264,40 @@ class SaharaEmergencyService extends EmergencyService {
       timestamp: now,
       type: ui_msg.MessageType.text,
       priority: priority,
-      isDelivered: _meshService!.connectedPeers.contains(targetNodeId),
+      isDelivered: isDeliveredNow,
       isFromMe: true,
       hops: 1,
     );
 
-    _conversationMessages.putIfAbsent(targetNodeId, () => []).add(uiMessage);
+    _conversationMessages.putIfAbsent(receiverId, () => []).add(uiMessage);
+    if (targetNodeId != receiverId) {
+      _conversationMessages.putIfAbsent(targetNodeId, () => []).add(uiMessage);
+    }
     notifyListeners();
 
-    // Dispatch across mesh transport
-    await _meshService!.sendDirectMessage(
-      receiverNodeId: targetNodeId,
-      receiverUserId: targetUserId,
-      content: trimmed,
-      senderName: myName,
-      priority: packetPriority,
-      messageId: packetId,
-    );
+    // 2. Persist safely in SQLite
+    try {
+      await db.insertMessage(packet);
+    } catch (e) {
+      debugPrint('[SAHARA DB] Error inserting outgoing message: $e');
+    }
 
-    // Trigger background sync with backend if online
+    // 3. Dispatch across mesh transport
+    try {
+      await _meshService!.sendDirectMessage(
+        receiverNodeId: targetNodeId,
+        receiverUserId: targetUserId,
+        content: trimmed,
+        senderName: myName,
+        priority: packetPriority,
+        messageId: packetId,
+      );
+      debugPrint('[SAHARA SEND] Successfully dispatched direct message $packetId to $targetNodeId');
+    } catch (e) {
+      debugPrint('[SAHARA SEND] Error sending direct message: $e');
+    }
+
+    // 4. Trigger background sync with backend if online
     unawaited(syncWithBackend());
   }
 
@@ -818,19 +1306,19 @@ class SaharaEmergencyService extends EmergencyService {
     final trimmed = content.trim();
     if (trimmed.isEmpty || _meshService == null) return;
 
-    final myName = _userProfile?.fullName ?? 'SAHARA Alert';
-    await _meshService!.sendEmergencyBroadcast(
-      content: trimmed,
-      senderName: myName,
-    );
+    final myName = _userProfile?.fullName.trim() ?? 'SAHARA Alert';
+    final packetId = 'BC_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      await _meshService!.sendEmergencyBroadcast(
+        content: trimmed,
+        senderName: myName,
+        messageId: packetId,
+      );
+      debugPrint('[SAHARA BROADCAST] Successfully dispatched emergency broadcast across mesh: "$trimmed"');
+    } catch (e) {
+      debugPrint('[SAHARA BROADCAST] Error dispatching emergency broadcast: $e');
+    }
     unawaited(syncWithBackend());
-    notifyListeners();
-
-    NotificationService().showEmergencyBroadcastNotification(
-      title: 'Emergency Broadcast Sent',
-      message: trimmed,
-      severity: AnnouncementSeverity.warning,
-    );
   }
 
   @override
@@ -843,34 +1331,36 @@ class SaharaEmergencyService extends EmergencyService {
         : 'CRITICAL SOS DISTRESS BEACON — Immediate Assistance Required';
 
     final packetId = 'SOS_${_myNodeId}_${DateTime.now().millisecondsSinceEpoch}';
-    final myName = _userProfile?.fullName ?? 'SOS Beacon';
+    final myName = _userProfile?.fullName.trim() ?? 'SOS Beacon';
 
-    await db.insertEmergencyReport({
-      'report_id': packetId,
-      'sender_id': _myUserId,
-      'type': 'SOS',
-      'location': locationCoordinates,
-      'priority': 'Highest',
-      'details': details,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'status': 'PENDING',
-    });
+    try {
+      await db.insertEmergencyReport({
+        'report_id': packetId,
+        'sender_id': _myUserId,
+        'type': 'SOS',
+        'location': locationCoordinates,
+        'priority': 'Highest',
+        'details': details,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'status': 'PENDING',
+      });
+    } catch (e) {
+      debugPrint('[SAHARA DB] Error inserting SOS report: $e');
+    }
 
-    await _meshService?.sendSosAlert(
-      location: locationCoordinates,
-      details: details,
-      senderName: myName,
-      messageId: packetId,
-    );
+    try {
+      await _meshService?.sendSosAlert(
+        location: locationCoordinates,
+        details: details,
+        senderName: myName,
+        messageId: packetId,
+      );
+      debugPrint('[SAHARA SOS] Successfully dispatched SOS alert $packetId across mesh');
+    } catch (e) {
+      debugPrint('[SAHARA SOS] Error sending SOS alert: $e');
+    }
 
     unawaited(syncWithBackend());
-
-    NotificationService().showEmergencyBroadcastNotification(
-      title: 'EMERGENCY DISTRESS BEACON',
-      message: details,
-      severity: AnnouncementSeverity.evacuation,
-      id: packetId,
-    );
   }
 
   @override
@@ -882,10 +1372,24 @@ class SaharaEmergencyService extends EmergencyService {
   @override
   void pingPerson(String personId) async {
     if (_meshService == null) return;
-    sendMessage(
-      receiverId: personId,
-      content: 'PING [Radio Connectivity Check]',
-      priority: ui_msg.MessagePriority.normal,
+    final person = getPersonById(personId);
+    String targetNodeId = personId;
+    if (!targetNodeId.toUpperCase().startsWith('NODE_')) {
+      for (final p in allKnownPeople) {
+        if ((p.id == personId || p.phoneNumber == personId) && p.id.toUpperCase().startsWith('NODE_')) {
+          targetNodeId = p.id;
+          break;
+        }
+      }
+    }
+    final targetUserId = person?.phoneNumber ?? personId;
+    final myName = _userProfile?.fullName.trim() ?? 'You';
+
+    debugPrint('[SAHARA-PING] SENT peer=$targetNodeId');
+    await _meshService!.sendPing(
+      targetNodeId: targetNodeId,
+      senderName: myName,
+      targetUserId: targetUserId,
     );
   }
 
@@ -1017,6 +1521,14 @@ class SaharaEmergencyService extends EmergencyService {
     _userProfile = profile;
     await NativeBridge.saveProfile(profile);
 
+    // Update transport display name & restart advertising with new composite name
+    if (_transport is NearbyConnectionsTransport) {
+      unawaited((_transport as NearbyConnectionsTransport).updateDisplayName(profile.fullName));
+    }
+
+    // Broadcast updated profile across mesh so all peers update their contact names immediately
+    unawaited(_broadcastProfileUpdate());
+
     // Register with backend
     try {
       final reg = await backendClient.registerUser(
@@ -1064,6 +1576,7 @@ class SaharaEmergencyService extends EmergencyService {
     _messagesSub?.cancel();
     _sosSub?.cancel();
     _broadcastSub?.cancel();
+    _pingSub?.cancel();
     _meshService?.dispose();
     super.dispose();
   }

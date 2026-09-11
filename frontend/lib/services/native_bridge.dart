@@ -169,4 +169,48 @@ class NativeBridge {
       return false;
     }
   }
+
+  /// Starts the Android Foreground Service for maintaining Bluetooth mesh execution while locked
+  static Future<bool> startMeshForegroundService() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? success = await _channel.invokeMethod<bool>('startMeshForegroundService');
+      return success ?? true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Stops the Android Foreground Service
+  static Future<bool> stopMeshForegroundService() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? success = await _channel.invokeMethod<bool>('stopMeshForegroundService');
+      return success ?? true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if device screen is currently turned off or non-interactive
+  static Future<bool> isScreenOff() async {
+    if (!isAndroidDevice) return false;
+    try {
+      final bool? isOff = await _channel.invokeMethod<bool>('isScreenOff');
+      return isOff ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if device is currently locked
+  static Future<bool> isDeviceLocked() async {
+    if (!isAndroidDevice) return false;
+    try {
+      final bool? locked = await _channel.invokeMethod<bool>('isDeviceLocked');
+      return locked ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

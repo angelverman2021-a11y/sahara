@@ -163,6 +163,8 @@ class MeshService {
       StreamController<MessagePacket>.broadcast();
   final StreamController<MessagePacket> _sosController =
       StreamController<MessagePacket>.broadcast();
+  final StreamController<MessagePacket> _pingController =
+      StreamController<MessagePacket>.broadcast();
   final StreamController<List<String>> _peersController =
       StreamController<List<String>>.broadcast();
 
@@ -174,6 +176,9 @@ class MeshService {
 
   /// Stream of high-priority SOS alerts received or relayed
   Stream<MessagePacket> get onSosReceived => _sosController.stream;
+
+  /// Stream of peer ping check alerts
+  Stream<MessagePacket> get onPingReceived => _pingController.stream;
 
   /// Stream of currently connected nearby peer node IDs
   Stream<List<String>> get onPeersChanged => _peersController.stream;
@@ -215,6 +220,7 @@ class MeshService {
     _messageController.close();
     _broadcastController.close();
     _sosController.close();
+    _pingController.close();
     _peersController.close();
   }
 
@@ -301,12 +307,27 @@ class MeshService {
       _handleBroadcastPacket(fromPeerId, packet);
     } else if (packet.type == MessageType.text) {
       _handleDirectTextPacket(fromPeerId, packet);
+    } else if (packet.type == MessageType.ping) {
+      _handlePingPacket(fromPeerId, packet);
     } else {
-      // General direct delivery for system/handshake/status packets
-      if (packet.receiverNodeId == myNodeId || packet.receiverNodeId == 'BROADCAST') {
+      // General direct delivery for system/handshake/status/profile packets
+      final isForMe = packet.receiverNodeId.trim().toUpperCase() == myNodeId.trim().toUpperCase() ||
+          (packet.receiverId.isNotEmpty && packet.receiverId.trim().toUpperCase() == myUserId.trim().toUpperCase()) ||
+          packet.receiverNodeId.trim().toUpperCase() == myUserId.trim().toUpperCase() ||
+          packet.receiverNodeId == 'BROADCAST' ||
+          packet.receiverNodeId.isEmpty;
+
+      if (isForMe) {
+        debugPrint('[SAHARA DELIVER] System packet (${packet.type}) delivered locally: id=${packet.messageId}');
         _messageController.add(packet.copyWith(status: MessageStatus.delivered));
       } else {
-        debugPrint('[SAHARA DROP] Unknown packet type: ${packet.type}');
+        debugPrint('[SAHARA ROUTE] System packet (${packet.type}) addressed to ${packet.receiverNodeId} (not me: $myNodeId). Evaluating relay...');
+        if (packet.ttl > 1) {
+          final relayed = packet.copyWithDecrementedTtl();
+          _routeOrBufferDirectMessage(fromPeerId, relayed);
+        } else {
+          debugPrint('[SAHARA DROP] System packet ${packet.messageId} dropped: TTL expired (ttl=${packet.ttl})');
+        }
       }
     }
   }
@@ -371,6 +392,30 @@ class MeshService {
       _routeOrBufferDirectMessage(fromPeerId, relayed);
     } else {
       debugPrint('[SAHARA DROP] Packet ${packet.messageId} dropped: TTL expired for forwarding (ttl=${packet.ttl})');
+    }
+  }
+
+  /// PING: Radio connectivity check and alert.
+  void _handlePingPacket(String fromPeerId, MessagePacket packet) {
+    final isForMe = packet.receiverNodeId.trim().toUpperCase() == myNodeId.trim().toUpperCase() ||
+        (packet.receiverId.isNotEmpty && packet.receiverId.trim().toUpperCase() == myUserId.trim().toUpperCase()) ||
+        packet.receiverNodeId.trim().toUpperCase() == myUserId.trim().toUpperCase() ||
+        packet.receiverNodeId == 'BROADCAST' ||
+        packet.receiverId == 'ALL_PEERS';
+
+    if (isForMe) {
+      debugPrint('[SAHARA DELIVER] Ping packet reached destination $myNodeId! id=${packet.messageId}, from=${packet.senderNodeId}');
+      _pingController.add(packet);
+    }
+
+    // Relay if broadcast or multi-hop
+    if (packet.ttl > 1) {
+      final relayed = packet.copyWithDecrementedTtl();
+      if (packet.receiverNodeId == 'BROADCAST' || packet.receiverId == 'ALL_PEERS') {
+        _relayToAllPeersExcept(fromPeerId, relayed);
+      } else if (!isForMe) {
+        _routeOrBufferDirectMessage(fromPeerId, relayed);
+      }
     }
   }
 
@@ -467,6 +512,44 @@ class MeshService {
   // Public Action APIs
   // ---------------------------------------------------------------------------
 
+  /// Dispatches a high-priority PING alert to verify peer radio connectivity.
+  Future<MessagePacket?> sendPing({
+    required String targetNodeId,
+    required String senderName,
+    String? targetUserId,
+  }) async {
+    final messageId = 'PING_${myNodeId}_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+    debugPrint('[SAHARA-PING] CREATED id=$messageId');
+
+    final packet = MessagePacket(
+      messageId: messageId,
+      senderId: myUserId,
+      receiverId: targetUserId ?? targetNodeId,
+      senderNodeId: myNodeId,
+      receiverNodeId: targetNodeId,
+      type: MessageType.ping,
+      priority: MessagePriority.high,
+      content: 'PING from $senderName',
+      senderName: senderName,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      status: MessageStatus.pending,
+      ttl: 8,
+    );
+
+    debugPrint('[SAHARA-PING] SENT peer=$targetNodeId');
+    _recordSeenMessageId(packet.messageId);
+
+    if (targetNodeId == 'BROADCAST' || targetNodeId == 'ALL_PEERS') {
+      final payload = packet.copyWithDecrementedTtl().toUtf8Bytes();
+      for (final peer in _connectedPeers) {
+        transport.sendRawPacket(peer, payload);
+      }
+    } else {
+      _routeOrBufferDirectMessage('', packet.copyWithDecrementedTtl());
+    }
+    return packet;
+  }
+
   /// Sends a direct person-to-person message through the mesh.
   /// [receiverNodeId] is the physical mesh node_id (used for routing).
   /// [receiverUserId] is the SAHARA user_id of the recipient (e.g. "SH-B02K").
@@ -475,6 +558,7 @@ class MeshService {
     required String receiverUserId,
     required String content,
     String? senderName,
+    String type = MessageType.text,
     String priority = MessagePriority.normal,
     int ttl = 8,
     String? messageId,
@@ -501,7 +585,7 @@ class MeshService {
       receiverId: resolvedReceiverUserId,
       senderNodeId: myNodeId,
       receiverNodeId: receiverNodeId,
-      type: MessageType.text,
+      type: type,
       priority: priority,
       content: content,
       timestamp: DateTime.now().millisecondsSinceEpoch,

@@ -36,4 +36,5 @@ abstract class EmergencyService extends ChangeNotifier {
   void updateRealBattery(int batteryPercent);
   Future<void> saveUserProfile(UserProfile profile);
   Future<void> setLanguage(String lang);
+  void setActiveChatPersonId(String? personId) {}
 }
