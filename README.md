@@ -40,30 +40,14 @@ Traditional disaster response relies on centralized cellular infrastructure:
 
 ```mermaid
 flowchart TD
-    subgraph Traditional ["Traditional Cellular Infrastructure: Single Point of Failure"]
-        direction TB
-        T1["Citizen Stranded in Flood"]
-        T2["Local Cellular Tower (Flooded / Power Grid Down)"]
-        T3["Network Blackout: Phones Display 'No Service'"]
-        T4["Distress Signal Lost: Rescue Teams Operate Blind"]
-
-        T1 -->|"Requires active cellular tower"| T2
-        T2 -->|"Towers exhaust backup batteries"| T3
-        T3 -->|"Zero packets escape disaster zone"| T4
+    subgraph Traditional ["Traditional Cellular: Fails in Disasters"]
+        T1["Citizen in Flood"] -->|"Requires cell tower"| T2["Tower Floods / Power Fails"] -->|"No Service"| T3["Distress Lost: Rescue Blind"]
     end
 
-    T4 -->|"Solved by Decentralized Mesh"| S1
+    T3 -->|"Solved by"| S1
 
-    subgraph Sahara ["SAHARA Autonomous Radio Mesh: Resilient Multi-Hop Relay"]
-        direction TB
-        S1["Citizen Stranded in Flood"]
-        S2["Neighboring Smartphones Form P2P Mesh (BLE & Wi-Fi Direct)"]
-        S3["Packets Relay Device-to-Device via Store & Forward"]
-        S4["Rescue Boats & Responders Receive Exact GPS & Battery Status"]
-
-        S1 -->|"1-Tap SOS (no SIM or internet needed)"| S2
-        S2 -->|"Multi-hop transmission across 100m+ links"| S3
-        S3 -->|"Direct delivery to disaster responder"| S4
+    subgraph Sahara ["SAHARA Mesh: Autonomous P2P Relay"]
+        S1["Citizen in Flood"] -->|"Direct BLE / Wi-Fi radio"| S2["Nearby Phones Relay (Mesh)"] -->|"Direct Delivery"| S3["Rescue Dispatched with Live GPS"]
     end
 ```
 
@@ -81,7 +65,7 @@ During floods, citizens almost always have smartphones with them, and those devi
 The following data chart illustrates the divergence between cellular network availability and emergency distress need over the critical 72-hour golden rescue window:
 
 <p align="center">
-  <img src="assets/disaster_impact_chart.svg" alt="Disaster Telecom Collapse vs. Emergency Rescue Need" width="100%" />
+  <img src="assets/disaster_impact_chart.svg" alt="Disaster Telecom Collapse vs. Emergency Rescue Need" width="85%" />
 </p>
 
 ### How SAHARA Closes the Gap
@@ -112,37 +96,12 @@ The application is structured into four decoupled layers, separating presentatio
 
 ```mermaid
 graph TD
-    subgraph UI ["Presentation Layer (Flutter UI)"]
-        direction LR
-        SOS["SOS Trigger"]
-        CHAT["P2P Chat"]
-        BCAST["Advisories"]
-        LOC["Peer Directory"]
-    end
+    UI["Presentation Layer: Flutter UI (SOS • P2P Chat • Broadcasts • Locator)"]
+    Service["Coordination Layer: MeshService & Identity (user_id ↔ node_id)"]
+    Engine["Mesh Engine: Routing Table • DTN Outbox • Deduplication"]
+    Transport["Physical Transport: Nearby Connections (BLE + Wi-Fi Direct)"]
 
-    subgraph Service ["Service & Coordination Layer"]
-        MS["MeshService<br/>(State, Routing & Events)"]
-        IS["Identity Mapping<br/>(user_id ↔ node_id)"]
-    end
-
-    subgraph Engine ["Core Mesh Engine"]
-        RT["Routing Table"]
-        SF["Store & Forward Outbox (DTN)"]
-        DEDUP["Deduplication Cache"]
-        CODEC["Packet Serialization"]
-    end
-
-    subgraph Transport ["Physical Transport Layer"]
-        NCT["NearbyConnectionsTransport"]
-        BLE["BLE Discovery (Presence)"]
-        WIFI["Wi-Fi Direct (Payload Socket)"]
-    end
-
-    UI --> Service
-    Service --> Engine
-    Engine --> Transport
-    Transport --> BLE
-    Transport --> WIFI
+    UI --> Service --> Engine --> Transport
 ```
 
 ### Component Roles
@@ -162,19 +121,12 @@ When a user transmits an SOS or message, the mesh engine routes the packet direc
 
 ```mermaid
 flowchart TD
-    A["User sends message or SOS"] --> B["MeshService creates MessagePacket"]
-    B --> C{"Is recipient reachable<br/>in active mesh?"}
-
-    C -->|"Yes (Direct or Multi-hop)"| D["Transmit via Wi-Fi Direct socket"]
-    C -->|"No (Peer Offline)"| E["Buffer in local Store & Forward queue"]
-
-    D --> F["Receiver validates signature & deduplicates"]
-    F --> G["Display in recipient chat UI"]
-
-    E --> H["Peer connects or new relay node appears"]
-    H --> I["Forward queued packet (TTL decremented)"]
-    I --> F
-    F --> J["Remove delivered packet from local buffer"]
+    A["User Sends SOS / Message"] --> B{"Peer in Range?"}
+    B -->|"Yes"| C["Immediate Wi-Fi Direct Delivery"]
+    B -->|"No"| D["Queue in Local DTN Outbox"]
+    D -->|"Peer Discovered"| E["Forward with TTL - 1"]
+    C --> F["Delivered & Displayed in UI"]
+    E --> F
 ```
 
 ### 2. Opportunistic Cloud Synchronization
@@ -183,14 +135,12 @@ When any mesh device comes within range of a functioning satellite link, cellula
 
 ```mermaid
 flowchart TD
-    A["SOS alert or message logged offline"] --> B{"Internet connection<br/>available?"}
-    B -->|"Yes"| C["Send directly to disaster backend"]
-    B -->|"No"| D["Queue in local SQLite outbox"]
-    D --> E{"Periodic check:<br/>Network restored?"}
-    E -->|"Still offline"| D
-    E -->|"Connected"| F["Bulk sync queued records in order"]
-    C --> G["Disaster Command Center"]
-    F --> G
+    A["Offline Event Logged"] --> B{"Internet Detected?"}
+    B -->|"Yes"| C["Direct HTTPS Sync"]
+    B -->|"No"| D["Buffer in SQLite Outbox"]
+    D -->|"Back Online"| E["Automatic Batch Sync"]
+    C --> F["Disaster Command Center"]
+    E --> F
 ```
 
 ---
