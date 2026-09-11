@@ -117,7 +117,7 @@ void main() async {
   // ---------------------------------------------------------------------------
   // 5. UI Initialization
   // ---------------------------------------------------------------------------
-  final mockService = MockService();
+  final mockService = MockService(meshService: meshService);
   final isProfileComplete = await NativeBridge.isProfileComplete();
 
   runApp(SaharaApp(

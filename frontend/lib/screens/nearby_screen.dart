@@ -69,9 +69,10 @@ class _NearbyScreenState extends State<NearbyScreen> {
         ? nearbyPeople
         : nearbyPeople.where((p) {
             final nameMatch = p.name.toLowerCase().contains(query);
+            final idMatch = p.id.toLowerCase().contains(query);
             final phoneMatch = p.phoneNumber?.toLowerCase().contains(query) ?? false;
             final locMatch = p.lastKnownLocation.toLowerCase().contains(query);
-            return nameMatch || phoneMatch || locMatch;
+            return nameMatch || idMatch || phoneMatch || locMatch;
           }).toList();
 
     return Scaffold(
@@ -157,7 +158,9 @@ class _NearbyScreenState extends State<NearbyScreen> {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            context.tr('no_peers_found', {'query': query}),
+                            query.isEmpty
+                                ? 'No nearby mesh peers in range'
+                                : context.tr('no_peers_found', {'query': query}),
                             style: const TextStyle(
                               fontFamily: AppTheme.fontFamily,
                               fontSize: 14,
@@ -173,7 +176,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final peer = filteredPeople[index];
-                        final isAlreadyFamily = peer.relation == PersonRelation.family;
+                        final isAlreadyFamily = peer.relation == PersonRelation.family ||
+                            service.familyMembers.any((m) => m.id == peer.id);
 
                         return PersonTile(
                           person: peer,

@@ -93,19 +93,35 @@ class NearbyConnectionsTransport implements MeshTransport {
   /// Returns `true` on successful transmission dispatch, `false` otherwise.
   @override
   Future<bool> sendRawPacket(String peerId, List<int> bytes) async {
-    final endpointId = _nodeIdToEndpointId[peerId];
-    if (endpointId == null || !_connectedPeers.contains(peerId)) {
-      debugPrint('[SAHARA TRANSPORT] Cannot send packet: peer $peerId not connected (endpoint: $endpointId)');
+    debugPrint('[SAHARA TRANSPORT SEND] Initiating sendRawPacket to peerId=$peerId, byteCount=${bytes.length}...');
+
+    // Case-insensitive fallback lookup for peer endpoint
+    var endpointId = _nodeIdToEndpointId[peerId];
+    if (endpointId == null) {
+      for (final entry in _nodeIdToEndpointId.entries) {
+        if (entry.key.trim().toUpperCase() == peerId.trim().toUpperCase()) {
+          endpointId = entry.value;
+          break;
+        }
+      }
+    }
+
+    final isConnected = _connectedPeers.contains(peerId) ||
+        _connectedPeers.any((p) => p.trim().toUpperCase() == peerId.trim().toUpperCase());
+
+    if (endpointId == null || !isConnected) {
+      debugPrint('[SAHARA TRANSPORT SEND] FAILED: peer $peerId not connected (endpoint: $endpointId, connectedPeers: $_connectedPeers)');
       return false;
     }
 
     try {
       final payload = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
-      debugPrint('[SAHARA TRANSPORT] Sending packet to $peerId ($endpointId): ${bytes.length} bytes');
+      debugPrint('[SAHARA TRANSPORT SEND] Sending ${payload.length} bytes to peerNodeId=$peerId (endpoint=$endpointId)');
       await nearby.sendBytesPayload(endpointId, payload);
+      debugPrint('[SAHARA TRANSPORT SEND] Dispatched ${payload.length} bytes to $peerId ($endpointId)');
       return true;
     } catch (e) {
-      debugPrint('[SAHARA TRANSPORT] Error sending packet to $peerId: $e');
+      debugPrint('[SAHARA TRANSPORT SEND] ERROR sending packet to $peerId ($endpointId): $e');
       return false;
     }
   }
@@ -215,15 +231,21 @@ class NearbyConnectionsTransport implements MeshTransport {
       await nearby.acceptConnection(
         endpointId,
         onPayLoadRecieved: (String epId, Payload payload) {
+          debugPrint('[SAHARA TRANSPORT RECEIVE] Incoming payload from endpoint=$epId: type=${payload.type}, byteLength=${payload.bytes?.length}');
           if (payload.type == PayloadType.BYTES && payload.bytes != null) {
             final senderNodeId = _endpointIdToNodeId[epId] ?? epId;
-            debugPrint('[SAHARA TRANSPORT] Packet received from $senderNodeId ($epId): ${payload.bytes!.length} bytes');
+            debugPrint('[SAHARA TRANSPORT RECEIVE] Resolved endpoint=$epId to peerNodeId=$senderNodeId (${payload.bytes!.length} bytes)');
             _eventsController.add(MeshTransportEvent(
               type: MeshTransportEventType.packetReceived,
               peerId: senderNodeId,
               data: payload.bytes,
             ));
+          } else {
+            debugPrint('[SAHARA DROP] Discarding non-byte or empty payload from endpoint=$epId');
           }
+        },
+        onPayloadTransferUpdate: (String epId, PayloadTransferUpdate update) {
+          debugPrint('[SAHARA TRANSPORT RECEIVE] Transfer update for endpoint=$epId: status=${update.status}, bytes=${update.bytesTransferred}/${update.totalBytes}');
         },
       );
     } catch (e) {

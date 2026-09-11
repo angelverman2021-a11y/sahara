@@ -8,9 +8,9 @@ class MeshStatus {
 
   const MeshStatus({
     this.isMeshActive = true,
-    this.nearbyCount = 12,
+    this.nearbyCount = 0,
     this.batteryLevel = 76,
-    this.activeRelays = 4,
+    this.activeRelays = 0,
     this.isBroadcastingSOS = false,
     required this.lastSynced,
   });

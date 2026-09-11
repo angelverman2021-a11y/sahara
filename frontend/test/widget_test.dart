@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sahra/main.dart';
 import 'package:sahra/models/announcement.dart';
+import 'package:sahra/models/message_model.dart';
+import 'package:sahra/services/mesh_service.dart';
 import 'package:sahra/services/mock_service.dart';
 import 'package:sahra/utils/broadcast_localizer.dart';
 import 'package:sahra/utils/date_input_formatter.dart';
@@ -181,7 +183,7 @@ void main() {
 
   testWidgets('Nearby screen titled "Nearby People" with search, ping and Add to family', (WidgetTester tester) async {
     setPhoneViewport(tester);
-    final mockService = MockService();
+    final mockService = MockService(initialPeers: ['NODE_6829AE']);
     await tester.pumpWidget(SaharaApp(
       mockService: mockService,
       initialIsOnboarded: true,
@@ -196,6 +198,9 @@ void main() {
 
     expect(find.text('Nearby People'), findsAtLeastNWidgets(1));
     expect(find.textContaining('People Discovered in Range'), findsOneWidget);
+    // Real user name displayed, NOT raw node_id
+    expect(find.text('Aarav Sharma'), findsOneWidget);
+    expect(find.text('NODE_6829AE'), findsNothing);
 
     // Nearby tiles have individual Ping
     expect(find.text('Ping'), findsAtLeastNWidgets(1));
@@ -204,14 +209,79 @@ void main() {
     final firstPing = find.text('Ping').first;
     await tester.tap(firstPing);
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.textContaining('Ping sent to'), findsOneWidget);
+    expect(find.textContaining('Ping sent to Aarav Sharma'), findsOneWidget);
 
     // Tap "Add to Family" on non-family peer
     final addFamilyBtn = find.text('Add to Family').first;
     await tester.ensureVisible(addFamilyBtn);
     await tester.tap(addFamilyBtn);
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.textContaining('Added'), findsOneWidget);
+    expect(find.textContaining('Added Aarav Sharma to Family'), findsOneWidget);
+  });
+
+  testWidgets('Real physical mesh peer connect and disconnect updates UI reactively', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService();
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockService,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // Initially 0 peers
+    expect(find.textContaining('0 Peers nearby'), findsOneWidget);
+    expect(find.textContaining('0 mesh peers detected'), findsOneWidget);
+
+    // Navigate to Nearby People
+    final nearbyCard = find.text('Nearby People');
+    await tester.ensureVisible(nearbyCard);
+    await tester.tap(nearbyCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('0 People Discovered in Range'), findsOneWidget);
+    expect(find.text('No nearby mesh peers in range'), findsOneWidget);
+
+    // Simulate real peer connection (e.g. NODE_6829AE -> Aarav Sharma)
+    mockService.updateConnectedPeers(['NODE_6829AE']);
+    await tester.pumpAndSettle();
+
+    // UI updates reactively with user's real name!
+    expect(find.text('1 People Discovered in Range'), findsOneWidget);
+    expect(find.text('Aarav Sharma'), findsOneWidget);
+    expect(find.text('NODE_6829AE'), findsNothing);
+    expect(find.text('Mesh Peer'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('Reachable • 1 hop'), findsOneWidget);
+
+    // Simulate peer disconnection
+    mockService.updateConnectedPeers([]);
+    await tester.pumpAndSettle();
+
+    // UI updates reactively to 0 peers
+    expect(find.text('0 People Discovered in Range'), findsOneWidget);
+    expect(find.text('No nearby mesh peers in range'), findsOneWidget);
+    expect(find.text('Aarav Sharma'), findsNothing);
+  });
+
+  testWidgets('Unknown mesh peer resolves to safe fallback "Mesh Peer" rather than NODE_xxxxxx', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService(initialPeers: ['NODE_UNKNOWN_99']);
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockService,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // Navigate to Nearby People
+    final nearbyCard = find.text('Nearby People');
+    await tester.ensureVisible(nearbyCard);
+    await tester.tap(nearbyCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 People Discovered in Range'), findsOneWidget);
+    // Never display NODE_xxxxxx as the person's name
+    expect(find.text('NODE_UNKNOWN_99'), findsNothing);
+    expect(find.text('Mesh Peer'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('Reachable • 1 hop'), findsOneWidget);
   });
 
   testWidgets('Emergency Broadcast flow with severity selector adds immediately to feed', (WidgetTester tester) async {
@@ -511,6 +581,191 @@ void main() {
 
     // Verified: Announcement title changed to Odia!
     expect(find.text('ବାତ୍ୟା ସତର୍କତା'), findsOneWidget);
+  });
+
+  testWidgets('Real physical mesh peer direct message flow transmits, receives and renders across two nodes with strict user_id vs node_id identity separation', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+
+    final transportA = MockMeshTransport(localNodeId: 'NODE_AAA111');
+    final transportB = MockMeshTransport(localNodeId: 'NODE_BBB222');
+
+    final meshServiceA = MeshService(
+      myNodeId: 'NODE_AAA111',
+      myUserId: 'SH-USERA',
+      transport: transportA,
+    );
+
+    final meshServiceB = MeshService(
+      myNodeId: 'NODE_BBB222',
+      myUserId: 'SH-USERB',
+      transport: transportB,
+    );
+
+    final mockServiceA = MockService(meshService: meshServiceA);
+    final mockServiceB = MockService(meshService: meshServiceB);
+
+    // Register Node B's user ID on MockService A
+    mockServiceA.registerPeerUserId('NODE_BBB222', 'SH-USERB');
+
+    // Connect Node A and Node B bidirectionally
+    transportA.connectTo('NODE_BBB222');
+
+    // Listen to packet received at Node B
+    MessagePacket? packetAtB;
+    final subB = meshServiceB.onMessageReceived.listen((p) {
+      packetAtB = p;
+    });
+
+    // Pump UI for Node B (Recipient phone)
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockServiceB,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // Node B sees 1 peer nearby
+    expect(find.textContaining('1 Peers nearby'), findsOneWidget);
+
+    // Node A sends direct message to Node B
+    mockServiceA.sendMessage(
+      receiverId: 'NODE_BBB222',
+      content: 'Emergency Alert: High water level near Bridge 4!',
+    );
+
+    await tester.pumpAndSettle();
+
+    // Verify MessagePacket identity separation on the wire:
+    // sender_id = user_id (SH-USERA), NOT node_id
+    // sender_node_id = physical node_id (NODE_AAA111)
+    // receiver_id = user_id (SH-USERB), NOT node_id
+    // receiver_node_id = physical node_id (NODE_BBB222)
+    expect(packetAtB, isNotNull);
+    expect(packetAtB!.senderId, 'SH-USERA');
+    expect(packetAtB!.senderNodeId, 'NODE_AAA111');
+    expect(packetAtB!.receiverId, 'SH-USERB');
+    expect(packetAtB!.receiverNodeId, 'NODE_BBB222');
+    expect(packetAtB!.content, 'Emergency Alert: High water level near Bridge 4!');
+
+    // Node B learned Node A's user_id automatically from the incoming packet!
+    expect(mockServiceB.resolvePeerUserId('NODE_AAA111'), 'SH-USERA');
+
+    // Navigate to Messages screen on Node B
+    final messagesCard = find.text('Messages');
+    await tester.ensureVisible(messagesCard);
+    await tester.tap(messagesCard);
+    await tester.pumpAndSettle();
+
+    // Node B's conversation list shows the message from Node A!
+    expect(find.text('Emergency Alert: High water level near Bridge 4!'), findsOneWidget);
+
+    // Open chat with Node A on Node B
+    await tester.tap(find.text('Emergency Alert: High water level near Bridge 4!'));
+    await tester.pumpAndSettle();
+
+    // Message is displayed in chat bubble
+    expect(find.text('Emergency Alert: High water level near Bridge 4!'), findsOneWidget);
+
+    await subB.cancel();
+    meshServiceA.dispose();
+    meshServiceB.dispose();
+    mockServiceA.dispose();
+    mockServiceB.dispose();
+    transportA.dispose();
+    transportB.dispose();
+  });
+
+  test('MeshService strict identity separation: sender_id and receiver_id are user_id, sender_node_id and receiver_node_id are node_id', () async {
+    final transportA = MockMeshTransport(localNodeId: 'NODE_AAA111');
+    final transportB = MockMeshTransport(localNodeId: 'NODE_BBB222');
+
+    final meshServiceA = MeshService(
+      myNodeId: 'NODE_AAA111',
+      myUserId: 'SH-USERA',
+      transport: transportA,
+    );
+
+    final meshServiceB = MeshService(
+      myNodeId: 'NODE_BBB222',
+      myUserId: 'SH-USERB',
+      transport: transportB,
+    );
+
+    transportA.connectTo('NODE_BBB222');
+
+    MessagePacket? packetAtB;
+    final subB = meshServiceB.onMessageReceived.listen((p) {
+      packetAtB = p;
+    });
+
+    MessagePacket? packetAtA;
+    final subA = meshServiceA.onMessageReceived.listen((p) {
+      packetAtA = p;
+    });
+
+    await meshServiceA.sendDirectMessage(
+      receiverNodeId: 'NODE_BBB222',
+      receiverUserId: 'SH-USERB',
+      content: 'Ping from Node A',
+    );
+
+    expect(packetAtB, isNotNull);
+    expect(packetAtB!.senderId, 'SH-USERA');
+    expect(packetAtB!.senderNodeId, 'NODE_AAA111');
+    expect(packetAtB!.receiverId, 'SH-USERB');
+    expect(packetAtB!.receiverNodeId, 'NODE_BBB222');
+
+    await meshServiceB.sendDirectMessage(
+      receiverNodeId: 'NODE_AAA111',
+      receiverUserId: 'SH-USERA',
+      content: 'Pong from Node B',
+    );
+
+    expect(packetAtA, isNotNull);
+    expect(packetAtA!.senderId, 'SH-USERB');
+    expect(packetAtA!.senderNodeId, 'NODE_BBB222');
+    expect(packetAtA!.receiverId, 'SH-USERA');
+    expect(packetAtA!.receiverNodeId, 'NODE_AAA111');
+
+    await subA.cancel();
+    await subB.cancel();
+    meshServiceA.dispose();
+    meshServiceB.dispose();
+    transportA.dispose();
+    transportB.dispose();
+  });
+
+  test('Identity mapping: resolvePeerUserId and resolvePeerNodeId strictly separate User ID from Node ID', () {
+    final mockService = MockService();
+
+    // Known device pairs from SAHARA test directory / test devices
+    expect(mockService.resolvePeerUserId('NODE_6829AE'), 'SH-6829');
+    expect(mockService.resolvePeerNodeId('SH-6829'), 'NODE_6829AE');
+
+    expect(mockService.resolvePeerUserId('NODE_33D404'), 'SH-33D4');
+    expect(mockService.resolvePeerNodeId('SH-33D4'), 'NODE_33D404');
+
+    expect(mockService.resolvePeerUserId('NODE_A01'), 'SH-A01');
+    expect(mockService.resolvePeerNodeId('SH-A01'), 'NODE_A01');
+
+    // Local contact IDs resolve to their physical node_id and user_id
+    expect(mockService.resolvePeerNodeId('fam_mother'), 'NODE_J10');
+    expect(mockService.resolvePeerUserId('fam_mother'), 'SH-J10');
+
+    // User ID directly passed returns itself as user_id
+    expect(mockService.resolvePeerUserId('SH-ZJHD'), 'SH-ZJHD');
+
+    // Node ID directly passed returns itself as node_id
+    expect(mockService.resolvePeerNodeId('NODE_TEST99'), 'NODE_TEST99');
+
+    // Fallback derivation for arbitrary unknown nodes generates canonical SH-XXXX
+    expect(mockService.resolvePeerUserId('NODE_DEADBEEF'), 'SH-DEAD');
+
+    // Learned peer registrations update mappings dynamically
+    mockService.registerPeerUserId('NODE_CUSTOM1', 'SH-CUST1');
+    expect(mockService.resolvePeerUserId('NODE_CUSTOM1'), 'SH-CUST1');
+    expect(mockService.resolvePeerNodeId('SH-CUST1'), 'NODE_CUSTOM1');
+
+    mockService.dispose();
   });
 }
 

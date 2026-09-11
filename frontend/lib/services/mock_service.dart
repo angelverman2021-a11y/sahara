@@ -1,20 +1,115 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/announcement.dart';
 import '../models/mesh_status.dart';
 import '../models/message.dart';
+import '../models/message_model.dart' show MessagePacket;
 import '../models/person.dart';
 import '../models/user_profile.dart';
 import '../utils/broadcast_localizer.dart';
 import 'emergency_service.dart';
+import 'mesh_service.dart';
 import 'native_bridge.dart';
 
 
 class MockService extends EmergencyService {
+  final MeshService? meshService;
+  StreamSubscription<List<String>>? _peersSubscription;
+  StreamSubscription<MessagePacket>? _messageSubscription;
+  StreamSubscription<MessagePacket>? _broadcastSubscription;
+  StreamSubscription<MessagePacket>? _sosSubscription;
+  List<Person> _realNearbyPeers = [];
+
+  /// Mapping of known physical node IDs to human-readable names
+  /// sourced from the SAHARA directory / dataset / test devices.
+  static const Map<String, String> _knownNodeToName = {
+    'NODE_6829AE': 'Aarav Sharma',
+    'NODE_A01': 'Aarav Sharma',
+    'NODE_B02': 'Sunita Devi',
+    'NODE_C03': 'Ramesh Kumar',
+    'NODE_D04': 'Priya Das',
+    'NODE_E05': 'Bikash Borah',
+    'NODE_F06': 'Lakshmi Patel',
+    'NODE_G07': 'Manoj Soren',
+    'NODE_H08': 'Deepika Roy',
+    'NODE_I09': 'Angel',
+    'NODE_J10': 'Mother',
+    'NODE_K11': 'Father',
+    'NODE_L12': 'Sister',
+    'NODE_M13': 'Rahul',
+    'NODE_N14': 'Priya',
+    'NODE_O15': 'Arjun',
+    'NODE_P16': 'Neha',
+    'NODE_Q17': 'Karan',
+    'NODE_R18': 'Ananya',
+    'NODE_S19': 'Rohit',
+    'NODE_T20': 'Meera',
+    'NODE_U21': 'Aman',
+    'NODE_V22': 'Simran',
+    'NODE_W23': 'Vivek',
+    'NODE_X24': 'Ishita',
+    'NODE_Y25': 'Aditya',
+    'NODE_Z26': 'Kavya',
+    'NODE_AA27': 'Varun',
+    'NODE_AB28': 'Riya',
+  };
+
+  /// Mapping of known physical node IDs to permanent SAHARA user IDs (SH-XXXX)
+  /// sourced from the SAHARA directory / dataset / test devices.
+  static const Map<String, String> _knownNodeToUserId = {
+    'NODE_6829AE': 'SH-6829',
+    'NODE_33D404': 'SH-33D4',
+    'NODE_A01': 'SH-A01',
+    'NODE_B02': 'SH-B02',
+    'NODE_C03': 'SH-C03',
+    'NODE_D04': 'SH-D04',
+    'NODE_E05': 'SH-E05',
+    'NODE_F06': 'SH-F06',
+    'NODE_G07': 'SH-G07',
+    'NODE_H08': 'SH-H08',
+    'NODE_I09': 'SH-I09',
+    'NODE_J10': 'SH-J10',
+    'NODE_K11': 'SH-K11',
+    'NODE_L12': 'SH-L12',
+    'NODE_M13': 'SH-M13',
+    'NODE_N14': 'SH-N14',
+    'NODE_O15': 'SH-O15',
+    'NODE_P16': 'SH-P16',
+    'NODE_Q17': 'SH-Q17',
+    'NODE_R18': 'SH-R18',
+    'NODE_S19': 'SH-S19',
+    'NODE_T20': 'SH-T20',
+    'NODE_U21': 'SH-U21',
+    'NODE_V22': 'SH-V22',
+    'NODE_W23': 'SH-W23',
+    'NODE_X24': 'SH-X24',
+    'NODE_Y25': 'SH-Y25',
+    'NODE_Z26': 'SH-Z26',
+    'NODE_AA27': 'SH-AA27',
+    'NODE_AB28': 'SH-AB28',
+  };
+
+  /// Local directory contact ID to physical node ID mapping
+  static const Map<String, String> _contactIdToNodeId = {
+    'fam_mother': 'NODE_J10',
+    'fam_father': 'NODE_K11',
+    'fam_sister': 'NODE_L12',
+    'contact_rahul': 'NODE_M13',
+    'contact_emergency_team': 'NODE_A01',
+    'peer_dr_neha': 'NODE_P16',
+    'peer_medical_post': 'NODE_C03',
+    'peer_guard_post': 'NODE_G07',
+  };
+
+  final Map<String, String> _customPeerNames = {};
+  final Map<String, String> _customPeerUserIds = {};
+
   MeshStatus _meshStatus = MeshStatus(
     isMeshActive: true,
-    nearbyCount: 12,
+    nearbyCount: 0,
     batteryLevel: 85, // Updated dynamically from real Android BatteryManager
-    activeRelays: 4,
+    activeRelays: 0,
     isBroadcastingSOS: false,
     lastSynced: DateTime.now(),
   );
@@ -85,17 +180,7 @@ class MockService extends EmergencyService {
       coordinates: '28.5388° N, 77.3820° E',
     ),
 
-    // Additional Nearby Mesh Peers
-    const Person(
-      id: 'peer_priya',
-      name: 'Priya S.',
-      relation: PersonRelation.nearby,
-      status: PersonStatus.reachable,
-      hops: 1,
-      lastSeen: 'Just now',
-      locationAvailable: true,
-      lastKnownLocation: 'Block A Shelter',
-    ),
+    // Emergency Team & Contacts (Non-mesh local directory)
     const Person(
       id: 'peer_dr_neha',
       name: 'Dr. Neha (Medic)',
@@ -105,16 +190,6 @@ class MockService extends EmergencyService {
       lastSeen: '1 min ago',
       locationAvailable: true,
       lastKnownLocation: 'First-Aid Tent #2',
-    ),
-    const Person(
-      id: 'peer_amit',
-      name: 'Amit K.',
-      relation: PersonRelation.nearby,
-      status: PersonStatus.reachable,
-      hops: 2,
-      lastSeen: '2 min ago',
-      locationAvailable: false,
-      lastKnownLocation: 'North Overpass',
     ),
     const Person(
       id: 'peer_medical_post',
@@ -127,16 +202,6 @@ class MockService extends EmergencyService {
       lastKnownLocation: 'Civic Hospital Annex',
     ),
     const Person(
-      id: 'peer_sahil',
-      name: 'Sahil V.',
-      relation: PersonRelation.nearby,
-      status: PersonStatus.reachable,
-      hops: 3,
-      lastSeen: '4 min ago',
-      locationAvailable: false,
-      lastKnownLocation: 'Market Square',
-    ),
-    const Person(
       id: 'peer_guard_post',
       name: 'Gate 4 Guard Post',
       relation: PersonRelation.emergencyTeam,
@@ -146,33 +211,21 @@ class MockService extends EmergencyService {
       locationAvailable: true,
       lastKnownLocation: 'Gate 4 Perimeter',
     ),
-    const Person(
-      id: 'peer_relay_node',
-      name: 'Mesh Relay Node #04',
-      relation: PersonRelation.nearby,
-      status: PersonStatus.reachable,
-      hops: 1,
-      lastSeen: 'Just now',
-      locationAvailable: true,
-      lastKnownLocation: 'Water Tower Repeater',
-    ),
-    const Person(
-      id: 'peer_sunita',
-      name: 'Sunita D.',
-      relation: PersonRelation.nearby,
-      status: PersonStatus.reachable,
-      hops: 2,
-      lastSeen: '6 min ago',
-      locationAvailable: false,
-      lastKnownLocation: 'East Apartments',
-    ),
   ];
 
   late final Map<String, List<Message>> _messages;
   final List<Message> _broadcasts = [];
 
-  MockService() {
+  MockService({this.meshService, List<String>? initialPeers}) {
     final now = DateTime.now();
+
+    final ms = meshService;
+    if (ms != null) {
+      attachMeshService(ms);
+    }
+    if (initialPeers != null && initialPeers.isNotEmpty) {
+      updateConnectedPeers(initialPeers);
+    }
     _messages = {
       'fam_mother': [
         Message(
@@ -306,6 +359,28 @@ class MockService extends EmergencyService {
       if (savedLang != null && savedLang.isNotEmpty) {
         _selectedLanguage = savedLang;
       }
+
+      // Load any persisted peer name and user ID mappings from SharedPreferences
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('peer_name_')) {
+          final peerNodeId = key.substring('peer_name_'.length);
+          final peerName = prefs.getString(key);
+          if (peerName != null && peerName.trim().isNotEmpty) {
+            _customPeerNames[peerNodeId] = peerName.trim();
+          }
+        } else if (key.startsWith('peer_userid_')) {
+          final peerNodeId = key.substring('peer_userid_'.length);
+          final peerUserId = prefs.getString(key);
+          if (peerUserId != null && peerUserId.trim().isNotEmpty) {
+            _customPeerUserIds[peerNodeId] = peerUserId.trim();
+          }
+        }
+      }
+      if (_realNearbyPeers.isNotEmpty) {
+        final currentPeerIds = _realNearbyPeers.map((p) => p.id).toList();
+        updateConnectedPeers(currentPeerIds);
+      }
     } catch (_) {}
 
     try {
@@ -326,8 +401,264 @@ class MockService extends EmergencyService {
   @override
   MeshStatus get meshStatus => _meshStatus;
 
+  /// Resolves a physical mesh [nodeId] to a human-readable display name.
+  /// Uses existing directory / test dataset mapping, persisted identity cache,
+  /// or local contacts. Falls back to "Mesh Peer" if not yet resolved.
+  String resolvePeerName(String nodeId) {
+    if (_customPeerNames.containsKey(nodeId)) {
+      return _customPeerNames[nodeId]!;
+    }
+    if (_knownNodeToName.containsKey(nodeId)) {
+      return _knownNodeToName[nodeId]!;
+    }
+    for (final p in _people) {
+      if (p.id == nodeId && p.name.isNotEmpty) {
+        return p.name;
+      }
+    }
+    return 'Mesh Peer';
+  }
+
+  /// Dynamically registers or caches a peer's identity (e.g., from handshake or sync)
+  void registerPeerName(String nodeId, String name) {
+    final clean = name.trim();
+    if (clean.isNotEmpty) {
+      _customPeerNames[nodeId] = clean;
+      try {
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setString('peer_name_$nodeId', clean);
+        }).catchError((_) {});
+      } catch (_) {}
+      if (_realNearbyPeers.any((p) => p.id == nodeId)) {
+        final currentPeerIds = _realNearbyPeers.map((p) => p.id).toList();
+        updateConnectedPeers(currentPeerIds);
+      }
+    }
+  }
+
+  /// Resolves a peer identifier (node_id, contact ID, or user_id) to a permanent SAHARA User ID (SH-XXXX).
+  String resolvePeerUserId(String identifier) {
+    final cleanId = identifier.trim();
+    if (cleanId.startsWith('SH-')) {
+      return cleanId;
+    }
+    if (_customPeerUserIds.containsKey(cleanId)) {
+      return _customPeerUserIds[cleanId]!;
+    }
+    if (_knownNodeToUserId.containsKey(cleanId)) {
+      return _knownNodeToUserId[cleanId]!;
+    }
+    if (_contactIdToNodeId.containsKey(cleanId)) {
+      final mappedNode = _contactIdToNodeId[cleanId]!;
+      if (_knownNodeToUserId.containsKey(mappedNode)) {
+        return _knownNodeToUserId[mappedNode]!;
+      }
+    }
+    // Fallback: derive canonical SH-XXXX format from the hex / node ID
+    final cleanHex = cleanId
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .replaceFirst(RegExp(r'^NODE', caseSensitive: false), '');
+    final suffix = cleanHex.length >= 4 ? cleanHex.substring(0, 4).toUpperCase() : cleanHex.toUpperCase();
+    return 'SH-$suffix';
+  }
+
+  /// Resolves a peer identifier (user_id, contact ID, or node_id) to the physical routing Node ID (NODE_XXXX).
+  String resolvePeerNodeId(String identifier) {
+    final cleanId = identifier.trim();
+    if (cleanId.startsWith('NODE_')) {
+      return cleanId;
+    }
+    if (_contactIdToNodeId.containsKey(cleanId)) {
+      return _contactIdToNodeId[cleanId]!;
+    }
+    // Reverse lookup in learned peer user IDs
+    for (final entry in _customPeerUserIds.entries) {
+      if (entry.value == cleanId) {
+        return entry.key;
+      }
+    }
+    // Reverse lookup in known node-to-user-id mapping
+    for (final entry in _knownNodeToUserId.entries) {
+      if (entry.value == cleanId) {
+        return entry.key;
+      }
+    }
+    return cleanId;
+  }
+
+  /// Dynamically registers or caches a peer's permanent user_id (e.g., learned from an incoming packet)
+  void registerPeerUserId(String nodeId, String userId) {
+    final cleanNode = nodeId.trim();
+    final cleanUser = userId.trim();
+    if (cleanNode.isNotEmpty && cleanUser.isNotEmpty && !cleanUser.startsWith('NODE_')) {
+      _customPeerUserIds[cleanNode] = cleanUser;
+      try {
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setString('peer_userid_$cleanNode', cleanUser);
+        }).catchError((_) {});
+      } catch (_) {}
+    }
+  }
+
+  void attachMeshService(MeshService meshService) {
+    _peersSubscription?.cancel();
+    _messageSubscription?.cancel();
+    _broadcastSubscription?.cancel();
+    _sosSubscription?.cancel();
+
+    _peersSubscription = meshService.onPeersChanged.listen((peerList) {
+      updateConnectedPeers(peerList);
+    });
+
+    _messageSubscription = meshService.onMessageReceived.listen((packet) {
+      _handleIncomingMeshPacket(packet);
+    });
+
+    _broadcastSubscription = meshService.onBroadcastReceived.listen((packet) {
+      _handleIncomingBroadcastPacket(packet);
+    });
+
+    _sosSubscription = meshService.onSosReceived.listen((packet) {
+      _handleIncomingSosPacket(packet);
+    });
+
+    updateConnectedPeers(meshService.connectedPeers);
+  }
+
+  void _handleIncomingMeshPacket(MessagePacket packet) {
+    debugPrint('[SAHARA DELIVER] Incoming packet ${packet.messageId} reached MockService: from ${packet.senderNodeId} (${packet.senderId}): "${packet.content}"');
+
+    // Dynamically learn and associate peer user_id with peer node_id over the mesh
+    if (packet.senderId.isNotEmpty && !packet.senderId.startsWith('NODE_')) {
+      registerPeerUserId(packet.senderNodeId, packet.senderId);
+    }
+
+    final senderKey = packet.senderNodeId;
+    final list = _messages.putIfAbsent(senderKey, () => []);
+
+    // Deduplication in UI message list
+    if (list.any((m) => m.id == packet.messageId)) {
+      debugPrint('[SAHARA DROP] Duplicate message ${packet.messageId} already exists in UI conversation with $senderKey');
+      return;
+    }
+
+    final incoming = Message(
+      id: packet.messageId,
+      senderId: senderKey,
+      receiverId: 'me',
+      senderName: resolvePeerName(senderKey),
+      content: packet.content,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(packet.timestamp),
+      type: MessageType.text,
+      priority: packet.priority == 'Highest'
+          ? MessagePriority.critical
+          : (packet.priority == 'High' ? MessagePriority.high : MessagePriority.normal),
+      isDelivered: true,
+      isFromMe: false,
+      hops: (8 - packet.ttl).clamp(1, 15),
+    );
+    list.add(incoming);
+    debugPrint('[SAHARA DELIVER] Added incoming message to conversation with $senderKey (${incoming.senderName}). Notifying UI listeners!');
+    notifyListeners();
+  }
+
+  void _handleIncomingBroadcastPacket(MessagePacket packet) {
+    debugPrint('[SAHARA DELIVER] Incoming broadcast ${packet.messageId} reached MockService');
+
+    // Dynamically learn sender user_id if valid
+    if (packet.senderId.isNotEmpty && !packet.senderId.startsWith('NODE_')) {
+      registerPeerUserId(packet.senderNodeId, packet.senderId);
+    }
+
+    if (_broadcasts.any((m) => m.id == packet.messageId)) {
+      debugPrint('[SAHARA DROP] Duplicate broadcast ${packet.messageId} already in feed');
+      return;
+    }
+
+    final newBroadcast = Message(
+      id: packet.messageId,
+      senderId: packet.senderNodeId,
+      receiverId: 'all',
+      senderName: resolvePeerName(packet.senderNodeId),
+      content: packet.content,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(packet.timestamp),
+      type: MessageType.broadcast,
+      priority: MessagePriority.high,
+      isDelivered: true,
+      isFromMe: false,
+      hops: (8 - packet.ttl).clamp(1, 15),
+      translations: BroadcastLocalizer.findTemplateTranslations(packet.content),
+    );
+    _broadcasts.insert(0, newBroadcast);
+    notifyListeners();
+  }
+
+  void _handleIncomingSosPacket(MessagePacket packet) {
+    debugPrint('[SAHARA DELIVER] Incoming SOS alert ${packet.messageId} reached MockService');
+
+    // Dynamically learn sender user_id if valid
+    if (packet.senderId.isNotEmpty && !packet.senderId.startsWith('NODE_')) {
+      registerPeerUserId(packet.senderNodeId, packet.senderId);
+    }
+
+    if (_broadcasts.any((m) => m.id == packet.messageId)) {
+      debugPrint('[SAHARA DROP] Duplicate SOS alert ${packet.messageId} already in feed');
+      return;
+    }
+
+    final newSos = Message(
+      id: packet.messageId,
+      senderId: packet.senderNodeId,
+      receiverId: 'all',
+      senderName: '${resolvePeerName(packet.senderNodeId)} (EMERGENCY SOS)',
+      content: packet.content,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(packet.timestamp),
+      type: MessageType.sosAlert,
+      priority: MessagePriority.critical,
+      isDelivered: true,
+      isFromMe: false,
+      hops: (8 - packet.ttl).clamp(1, 15),
+      translations: BroadcastLocalizer.getSosTranslations(packet.content),
+    );
+    _broadcasts.insert(0, newSos);
+    notifyListeners();
+  }
+
+  void updateConnectedPeers(List<String> peerNodeIds) {
+    _realNearbyPeers = peerNodeIds.map((nodeId) {
+      final displayName = resolvePeerName(nodeId);
+      return Person(
+        id: nodeId, // physical node_id preserved internally for mesh routing & debugging
+        name: displayName, // user's actual human name, or safe fallback "Mesh Peer"
+        relation: PersonRelation.nearby,
+        status: PersonStatus.reachable,
+        hops: 1,
+        lastSeen: 'Just now',
+        locationAvailable: false,
+        lastKnownLocation: 'Nearby Mesh',
+      );
+    }).toList();
+
+    _meshStatus = _meshStatus.copyWith(
+      nearbyCount: peerNodeIds.length,
+      activeRelays: peerNodeIds.length,
+      lastSynced: DateTime.now(),
+    );
+
+    notifyListeners();
+  }
+
   @override
-  List<Person> get nearbyPeople => _people.where((p) => p.status == PersonStatus.reachable).toList();
+  void dispose() {
+    _peersSubscription?.cancel();
+    _messageSubscription?.cancel();
+    _broadcastSubscription?.cancel();
+    _sosSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  List<Person> get nearbyPeople => List.unmodifiable(_realNearbyPeers);
 
   @override
   List<Person> get familyMembers => _people.where((p) => p.relation == PersonRelation.family).toList();
@@ -335,9 +666,32 @@ class MockService extends EmergencyService {
   @override
   List<Person> get conversations {
     final convIds = ['fam_mother', 'contact_rahul', 'contact_emergency_team', 'fam_father', 'fam_sister'];
-    return convIds
-        .map((id) => _people.firstWhere((p) => p.id == id))
+    final base = convIds
+        .map((id) => getPersonById(id))
+        .whereType<Person>()
         .toList();
+
+    // Include any active mesh peer conversations
+    for (final entry in _messages.entries) {
+      if (entry.value.isNotEmpty && !base.any((p) => p.id == entry.key)) {
+        final peer = getPersonById(entry.key);
+        if (peer != null) {
+          base.insert(0, peer);
+        } else {
+          base.insert(0, Person(
+            id: entry.key,
+            name: resolvePeerName(entry.key),
+            relation: PersonRelation.nearby,
+            status: PersonStatus.reachable,
+            hops: 1,
+            lastSeen: 'Just now',
+            locationAvailable: false,
+            lastKnownLocation: 'Nearby Mesh',
+          ));
+        }
+      }
+    }
+    return List.unmodifiable(base);
   }
 
   @override
@@ -393,7 +747,18 @@ class MockService extends EmergencyService {
 
   @override
   List<Message> getMessages(String personId) {
-    return List.unmodifiable(_messages[personId] ?? []);
+    if (_messages.containsKey(personId)) {
+      return List.unmodifiable(_messages[personId]!);
+    }
+    final mappedNode = resolvePeerNodeId(personId);
+    if (_messages.containsKey(mappedNode)) {
+      return List.unmodifiable(_messages[mappedNode]!);
+    }
+    final mappedUser = resolvePeerUserId(personId);
+    if (_messages.containsKey(mappedUser)) {
+      return List.unmodifiable(_messages[mappedUser]!);
+    }
+    return const [];
   }
 
   @override
@@ -401,12 +766,28 @@ class MockService extends EmergencyService {
     try {
       return _people.firstWhere((p) => p.id == id);
     } catch (_) {
-      return null;
+      try {
+        return _realNearbyPeers.firstWhere((p) => p.id == id);
+      } catch (_) {
+        if (id.startsWith('NODE_') || id.startsWith('SH-')) {
+          return Person(
+            id: id,
+            name: resolvePeerName(id),
+            relation: PersonRelation.nearby,
+            status: PersonStatus.reachable,
+            hops: 1,
+            lastSeen: 'Just now',
+            locationAvailable: false,
+            lastKnownLocation: 'Nearby Mesh',
+          );
+        }
+        return null;
+      }
     }
   }
 
   @override
-  List<Person> get allKnownPeople => List.unmodifiable(_people);
+  List<Person> get allKnownPeople => List.unmodifiable([..._people, ..._realNearbyPeers]);
 
   @override
   List<Person> searchPeople(String query) {
@@ -414,13 +795,14 @@ class MockService extends EmergencyService {
     if (q.isEmpty) return const [];
     final digitsOnly = query.replaceAll(RegExp(r'\D'), '');
 
-    return _people.where((p) {
+    return [..._people, ..._realNearbyPeers].where((p) {
       final nameMatches = p.name.toLowerCase().contains(q);
+      final idMatches = p.id.toLowerCase().contains(q);
       final phone = p.phoneNumber ?? '';
       final phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
       final phoneMatches = (digitsOnly.isNotEmpty && phoneDigits.contains(digitsOnly)) ||
           phone.toLowerCase().contains(q);
-      return nameMatches || phoneMatches;
+      return nameMatches || idMatches || phoneMatches;
     }).toList();
   }
 
@@ -436,6 +818,8 @@ class MockService extends EmergencyService {
         ? locationCoordinates
         : '28.5355° N, 77.3910° E';
 
+    final details = 'EMERGENCY DISTRESS SIGNAL: Assistance needed at current location ($coords).';
+
     _broadcasts.insert(
       0,
       Message(
@@ -443,7 +827,7 @@ class MockService extends EmergencyService {
         senderId: 'me',
         receiverId: 'all',
         senderName: 'You (EMERGENCY SOS)',
-        content: 'EMERGENCY DISTRESS SIGNAL: Assistance needed at current location ($coords).',
+        content: details,
         timestamp: DateTime.now(),
         type: MessageType.sosAlert,
         priority: MessagePriority.critical,
@@ -454,6 +838,14 @@ class MockService extends EmergencyService {
     );
 
     notifyListeners();
+
+    final ms = meshService;
+    if (ms != null) {
+      debugPrint('[SAHARA SEND] Calling MeshService.sendSosAlert for coords: $coords');
+      ms.sendSosAlert(location: coords, details: details).catchError((e, stack) {
+        debugPrint('[SAHARA SEND] ERROR in MeshService.sendSosAlert: $e\n$stack');
+      });
+    }
   }
 
   @override
@@ -471,6 +863,13 @@ class MockService extends EmergencyService {
     required String content,
     MessagePriority priority = MessagePriority.normal,
   }) {
+    debugPrint('[SAHARA SEND] UI initiated message send: receiverId=$receiverId, content="$content", priority=$priority');
+
+    final receiverNodeId = resolvePeerNodeId(receiverId);
+    final receiverUserId = resolvePeerUserId(receiverId);
+
+    debugPrint('[SAHARA SEND] Resolved identities: receiverNodeId=$receiverNodeId, receiverUserId=$receiverUserId');
+
     final list = _messages.putIfAbsent(receiverId, () => []);
     final newMessage = Message(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
@@ -487,6 +886,25 @@ class MockService extends EmergencyService {
     );
     list.add(newMessage);
     notifyListeners();
+
+    final ms = meshService;
+    if (ms != null) {
+      debugPrint('[SAHARA SEND] Calling MeshService.sendDirectMessage: receiverNodeId=$receiverNodeId, receiverUserId=$receiverUserId');
+      ms.sendDirectMessage(
+        receiverNodeId: receiverNodeId,
+        receiverUserId: receiverUserId,
+        content: content.trim(),
+        priority: priority == MessagePriority.critical
+            ? 'Highest'
+            : (priority == MessagePriority.high ? 'High' : 'Normal'),
+      ).then((_) {
+        debugPrint('[SAHARA SEND] MeshService.sendDirectMessage successfully dispatched for $receiverNodeId ($receiverUserId)');
+      }).catchError((e, stack) {
+        debugPrint('[SAHARA SEND] ERROR in MeshService.sendDirectMessage: $e\n$stack');
+      });
+    } else {
+      debugPrint('[SAHARA SEND] MeshService is not attached, message saved in local store only');
+    }
   }
 
   @override
@@ -508,6 +926,14 @@ class MockService extends EmergencyService {
     );
     _broadcasts.insert(0, newBroadcast);
     notifyListeners();
+
+    final ms = meshService;
+    if (ms != null) {
+      debugPrint('[SAHARA SEND] Calling MeshService.sendEmergencyBroadcast for: "$trimmedContent"');
+      ms.sendEmergencyBroadcast(content: trimmedContent).catchError((e, stack) {
+        debugPrint('[SAHARA SEND] ERROR in MeshService.sendEmergencyBroadcast: $e\n$stack');
+      });
+    }
   }
 
   @override

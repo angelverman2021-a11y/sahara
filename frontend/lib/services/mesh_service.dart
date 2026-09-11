@@ -9,6 +9,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import '../models/message_model.dart';
 
 /// Event types emitted by the transport layer.
@@ -257,93 +259,139 @@ class MeshService {
   // ---------------------------------------------------------------------------
 
   void _handleRawPacket(String fromPeerId, List<int> rawBytes) {
+    debugPrint('[SAHARA MESH RECEIVE] Raw packet received from $fromPeerId: ${rawBytes.length} bytes');
     try {
       final packet = MessagePacket.fromUtf8Bytes(rawBytes);
-      _processPacket(fromPeerId, packet);
-    } catch (_) {
-      // Discard malformed packets silently to maintain resilience
+      debugPrint('[SAHARA DECODE] Successfully decoded MessagePacket: id=${packet.messageId}, sender=${packet.senderId} (${packet.senderNodeId}), receiver=${packet.receiverId} (${packet.receiverNodeId}), type=${packet.type}, ttl=${packet.ttl}');
+      handleIncomingPacket(fromPeerId, packet);
+    } catch (e, stack) {
+      debugPrint('[SAHARA DECODE] FAILED to decode packet from $fromPeerId: $e\n$stack');
+      debugPrint('[SAHARA DROP] Malformed packet from $fromPeerId dropped');
     }
+  }
+
+  /// Ingests and processes a decoded [MessagePacket] through deduplication,
+  /// TTL checking, stream delivery, and mesh relay.
+  void handleIncomingPacket(String fromPeerId, MessagePacket packet) {
+    debugPrint('[SAHARA MESH RECEIVE] Packet entered mesh engine: id=${packet.messageId}, type=${packet.type}, fromPeer=$fromPeerId, senderNode=${packet.senderNodeId}');
+    _processPacket(fromPeerId, packet);
   }
 
   void _processPacket(String fromPeerId, MessagePacket packet) {
     // 1. Duplicate Prevention: Check if already seen
     if (_seenMessageIds.contains(packet.messageId)) {
-      // Discard duplicate immediately (prevents loops and echo storms)
+      debugPrint('[SAHARA DROP] Duplicate packet ignored: ${packet.messageId}');
       return;
     }
 
     // 2. Mark as seen
     _recordSeenMessageId(packet.messageId);
 
-    // 3. Routing & Stream Delivery by Message Type
+    // 3. TTL Validation
+    if (packet.ttl <= 0) {
+      debugPrint('[SAHARA DROP] Packet ${packet.messageId} dropped: TTL <= 0 (ttl=${packet.ttl})');
+      return;
+    }
+
+    // 4. Routing & Stream Delivery by Message Type
+    debugPrint('[SAHARA ROUTE] Processing packet: id=${packet.messageId}, type=${packet.type}, dest=${packet.receiverNodeId}, myNodeId=$myNodeId');
     if (packet.type == MessageType.sos) {
       _handleSosPacket(fromPeerId, packet);
     } else if (packet.type == MessageType.broadcast) {
       _handleBroadcastPacket(fromPeerId, packet);
     } else if (packet.type == MessageType.text) {
       _handleDirectTextPacket(fromPeerId, packet);
+    } else {
+      debugPrint('[SAHARA DROP] Unknown packet type: ${packet.type}');
     }
   }
 
   /// SOS: High-priority distress alert.
   /// Delivers locally on EVERY node, decrements TTL, and relays to all other peers.
   void _handleSosPacket(String fromPeerId, MessagePacket packet) {
+    debugPrint('[SAHARA DELIVER] SOS packet delivered locally: ${packet.messageId}');
     // Deliver to local SOS stream for UI display and audio alerts
     _sosController.add(packet);
 
     // Relay through mesh if TTL allows
     if (packet.ttl > 1) {
       final relayed = packet.copyWithDecrementedTtl();
+      debugPrint('[SAHARA ROUTE] Relaying SOS ${packet.messageId} with new TTL=${relayed.ttl}');
       _relayToAllPeersExcept(fromPeerId, relayed);
+    } else {
+      debugPrint('[SAHARA DROP] SOS ${packet.messageId} relay halted: TTL reached limit (ttl=${packet.ttl})');
     }
   }
 
   /// BROADCAST: Local hazard announcement.
   /// Delivers locally on EVERY node once, decrements TTL, and relays to all other peers.
   void _handleBroadcastPacket(String fromPeerId, MessagePacket packet) {
+    debugPrint('[SAHARA DELIVER] Broadcast packet delivered locally: ${packet.messageId}');
     // Deliver to local broadcast stream
     _broadcastController.add(packet);
 
     // Relay through mesh if TTL allows
     if (packet.ttl > 1) {
       final relayed = packet.copyWithDecrementedTtl();
+      debugPrint('[SAHARA ROUTE] Relaying broadcast ${packet.messageId} with new TTL=${relayed.ttl}');
       _relayToAllPeersExcept(fromPeerId, relayed);
+    } else {
+      debugPrint('[SAHARA DROP] Broadcast ${packet.messageId} relay halted: TTL reached limit (ttl=${packet.ttl})');
     }
   }
 
   /// DIRECT TEXT: Person-to-person communication.
-  /// Delivers to local chat ONLY when receiverNodeId matches myNodeId.
+  /// Delivers to local chat ONLY when receiverNodeId matches myNodeId (or receiverId matches myUserId).
   /// Intermediate nodes forward silently without displaying in their chat.
   void _handleDirectTextPacket(String fromPeerId, MessagePacket packet) {
-    if (packet.receiverNodeId == myNodeId) {
-      // Reached destination! Deliver to local message stream
+    final isForMe = packet.receiverNodeId.trim().toUpperCase() == myNodeId.trim().toUpperCase() ||
+        (packet.receiverId.isNotEmpty && packet.receiverId.trim().toUpperCase() == myUserId.trim().toUpperCase());
+
+    debugPrint('[SAHARA ROUTE] Destination check for ${packet.messageId}: destNode="${packet.receiverNodeId}" vs myNode="$myNodeId", destUser="${packet.receiverId}" vs myUser="$myUserId", match=$isForMe');
+
+    if (isForMe) {
+      debugPrint('[SAHARA DELIVER] Direct text packet reached destination $myNodeId! id=${packet.messageId}, from=${packet.senderNodeId}');
       _messageController.add(packet.copyWith(status: MessageStatus.delivered));
       return;
     }
 
     // Intermediate relay node: do NOT display locally.
     // Relay toward destination if TTL allows.
+    debugPrint('[SAHARA ROUTE] Packet ${packet.messageId} addressed to ${packet.receiverNodeId} (not me: $myNodeId). Evaluating relay...');
     if (packet.ttl > 1) {
       final relayed = packet.copyWithDecrementedTtl();
+      debugPrint('[SAHARA ROUTE] Relaying packet ${packet.messageId} with new TTL=${relayed.ttl}');
       _routeOrBufferDirectMessage(fromPeerId, relayed);
+    } else {
+      debugPrint('[SAHARA DROP] Packet ${packet.messageId} dropped: TTL expired for forwarding (ttl=${packet.ttl})');
     }
   }
 
   void _routeOrBufferDirectMessage(String fromPeerId, MessagePacket packet) {
     // If destination node is directly connected, deliver straight to it
-    if (_connectedPeers.contains(packet.receiverNodeId)) {
-      transport.sendRawPacket(packet.receiverNodeId, packet.toUtf8Bytes());
+    final isDirectlyConnected = _connectedPeers.contains(packet.receiverNodeId) ||
+        _connectedPeers.any((p) => p.trim().toUpperCase() == packet.receiverNodeId.trim().toUpperCase());
+
+    if (isDirectlyConnected) {
+      final targetPeer = _connectedPeers.firstWhere(
+        (p) => p.trim().toUpperCase() == packet.receiverNodeId.trim().toUpperCase(),
+        orElse: () => packet.receiverNodeId,
+      );
+      debugPrint('[SAHARA ROUTE] Target $targetPeer is directly connected. Forwarding packet ${packet.messageId}...');
+      transport.sendRawPacket(targetPeer, packet.toUtf8Bytes());
       return;
     }
 
     // Otherwise, flood to all available peers except sender
     final targetPeers = _connectedPeers.where((p) => p != fromPeerId).toList();
     if (targetPeers.isNotEmpty) {
+      debugPrint('[SAHARA ROUTE] Flooding packet ${packet.messageId} to ${targetPeers.length} peers: $targetPeers');
+      final payload = packet.toUtf8Bytes();
       for (final peer in targetPeers) {
-        transport.sendRawPacket(peer, packet.toUtf8Bytes());
+        transport.sendRawPacket(peer, payload);
       }
     } else {
-      // No suitable forward peer available right now -> store and forward
+      debugPrint('[SAHARA ROUTE] No forward peers available for ${packet.receiverNodeId}. Buffering in store-and-forward outbox');
       _bufferMessage(packet);
     }
   }
@@ -420,10 +468,26 @@ class MeshService {
     String priority = MessagePriority.normal,
     int ttl = 8,
   }) async {
+    // Ensure receiverId is a genuine SAHARA user_id (SH-XXXX), not a node_id
+    String resolvedReceiverUserId = receiverUserId.trim();
+    if (resolvedReceiverUserId.isEmpty || resolvedReceiverUserId.toUpperCase().startsWith('NODE_')) {
+      final clean = receiverNodeId.replaceFirst(RegExp(r'^NODE_', caseSensitive: false), '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+      final suffix = clean.length >= 4 ? clean.substring(0, 4).toUpperCase() : clean.toUpperCase();
+      resolvedReceiverUserId = 'SH-$suffix';
+    }
+
+    // Ensure senderId is a genuine SAHARA user_id (SH-XXXX)
+    String resolvedSenderUserId = myUserId.trim();
+    if (resolvedSenderUserId.isEmpty || resolvedSenderUserId.toUpperCase().startsWith('NODE_')) {
+      final clean = myNodeId.replaceFirst(RegExp(r'^NODE_', caseSensitive: false), '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+      final suffix = clean.length >= 4 ? clean.substring(0, 4).toUpperCase() : clean.toUpperCase();
+      resolvedSenderUserId = 'SH-$suffix';
+    }
+
     final packet = MessagePacket(
       messageId: _generateMessageId(),
-      senderId: myUserId,
-      receiverId: receiverUserId,
+      senderId: resolvedSenderUserId,
+      receiverId: resolvedReceiverUserId,
       senderNodeId: myNodeId,
       receiverNodeId: receiverNodeId,
       type: MessageType.text,
@@ -434,27 +498,64 @@ class MeshService {
       status: MessageStatus.pending,
     );
 
+    debugPrint('[SAHARA PACKET] Outgoing MessagePacket created:');
+    debugPrint('[SAHARA PACKET]   message_id:       ${packet.messageId}');
+    debugPrint('[SAHARA PACKET]   sender_id:        ${packet.senderId}');
+    debugPrint('[SAHARA PACKET]   receiver_id:      ${packet.receiverId}');
+    debugPrint('[SAHARA PACKET]   sender_node_id:   ${packet.senderNodeId}');
+    debugPrint('[SAHARA PACKET]   receiver_node_id: ${packet.receiverNodeId}');
+    debugPrint('[SAHARA PACKET]   type:             ${packet.type}');
+    debugPrint('[SAHARA PACKET]   priority:         ${packet.priority}');
+    debugPrint('[SAHARA PACKET]   TTL:              ${packet.ttl}');
+
+    final payloadBytes = packet.toUtf8Bytes();
+    debugPrint('[SAHARA PACKET] MessagePacket serialized to UTF-8 bytes: length=${payloadBytes.length}');
+
     _recordSeenMessageId(packet.messageId);
 
     final outgoingPacket = packet.copyWithDecrementedTtl();
+    final outgoingBytes = outgoingPacket.toUtf8Bytes();
 
-    // If destination is directly connected, send straight to it
-    if (_connectedPeers.contains(receiverNodeId)) {
-      await transport.sendRawPacket(receiverNodeId, outgoingPacket.toUtf8Bytes());
+    // Check if destination is directly connected (with case-insensitive fallback)
+    final isDirectlyConnected = _connectedPeers.contains(receiverNodeId) ||
+        _connectedPeers.any((p) => p.trim().toUpperCase() == receiverNodeId.trim().toUpperCase());
+
+    if (isDirectlyConnected) {
+      final targetPeer = _connectedPeers.firstWhere(
+        (p) => p.trim().toUpperCase() == receiverNodeId.trim().toUpperCase(),
+        orElse: () => receiverNodeId,
+      );
+      debugPrint('[SAHARA ROUTE] Direct peer connected: $targetPeer. Dispatching packet ${packet.messageId}...');
+      await transport.sendRawPacket(targetPeer, outgoingBytes);
       return;
     }
 
     // Forward to all available peers
     if (_connectedPeers.isNotEmpty) {
-      final payload = outgoingPacket.toUtf8Bytes();
+      debugPrint('[SAHARA ROUTE] Target $receiverNodeId not directly connected. Flooding ${_connectedPeers.length} peers...');
       for (final peer in _connectedPeers) {
-        await transport.sendRawPacket(peer, payload);
+        await transport.sendRawPacket(peer, outgoingBytes);
       }
     } else {
-      // Destination not reachable right now: buffer in store-and-forward
+      debugPrint('[SAHARA ROUTE] No peers connected. Buffering packet ${packet.messageId} in store-and-forward outbox');
       _bufferMessage(outgoingPacket);
     }
   }
+
+  /// Direct convenience alias for [sendDirectMessage].
+  Future<void> sendMessage({
+    required String receiverNodeId,
+    required String receiverUserId,
+    required String content,
+    String priority = MessagePriority.normal,
+    int ttl = 8,
+  }) => sendDirectMessage(
+    receiverNodeId: receiverNodeId,
+    receiverUserId: receiverUserId,
+    content: content,
+    priority: priority,
+    ttl: ttl,
+  );
 
   /// Sends an emergency broadcast to all reachable civilian nodes.
   Future<void> sendEmergencyBroadcast({
