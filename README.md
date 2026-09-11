@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="frontend/assets/images/sahara_logo.png" alt="SAHARA Logo" width="100%" />
+<img src="frontend/assets/images/sahara_banner.png" alt="SAHARA Banner" width="100%" />
 
 # SAHARA
 ### Offline-First Civilian Emergency Communication & Disaster Management System
