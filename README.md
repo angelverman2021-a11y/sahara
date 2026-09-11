@@ -145,17 +145,19 @@ flowchart TD
 
 ---
 
-## Empirical Benchmarks & Hardware Testing
+## Hardware Verification
 
-Tested and verified on physical Android devices (OPPO F21 Pro and Samsung Galaxy):
+Tested on:
+- OPPO F21 Pro
+- Samsung Android device
 
-| Metric | Centralized Cellular (4G/5G) | SAHARA P2P Mesh | Operational Impact |
-|---|---|---|---|
-| **Disaster Uptime** | 0% during tower blackouts | **100% decentralized** | Autonomous operation without infrastructure |
-| **Per-Hop Latency** | Connection fails | **~65 ms (1 hop) / ~140 ms (2 hops)** | Immediate distress signal propagation |
-| **Hourly Battery Drain** | ~18.5% / hour (hunting for cell towers) | **~2.8% / hour (duty-cycled BLE)** | **85% battery savings** during extended power outages |
-| **Installed Package Size** | 100+ MB (bloated cloud SDKs) | **Under 48 MB** | Easily installs on budget hardware with 2GB RAM |
-| **Backend Dependencies** | Heavy external database stacks | **Pure Python standard library (0 pip packages)** | Zero setup overhead for rescue personnel |
+Verified:
+- Device discovery
+- P2P connection
+- Direct message transmission
+- Packet serialization
+- Packet reception
+- Message delivery
 
 ---
 
