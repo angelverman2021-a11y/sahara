@@ -18,9 +18,14 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
+    phone TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    status TEXT NOT NULL DEFAULT 'SAFE',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 
 CREATE TABLE IF NOT EXISTS families (
     family_id TEXT NOT NULL,

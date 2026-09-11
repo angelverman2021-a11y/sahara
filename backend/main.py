@@ -11,7 +11,7 @@ import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from backend.database import DEFAULT_DB_PATH, get_db, init_db
 from backend.sync import (
@@ -22,8 +22,10 @@ from backend.sync import (
     get_family_members,
     get_messages_for_user,
     get_user,
+    get_user_by_phone,
     sync_emergency_reports,
     sync_messages,
+    update_user_status,
     validate_family,
     validate_user,
 )
@@ -74,6 +76,14 @@ class SaharaHandler(BaseHTTPRequestHandler):
             raise ValidationError("Invalid 'Content-Length' header.")
 
         if content_length > MAX_REQUEST_BYTES:
+            # Drain body to avoid TCP RST on client before HTTP 413 can be read
+            self.close_connection = True
+            remaining = content_length
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 65536))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
             raise OverflowError(f"Request payload exceeds maximum allowed size of {MAX_REQUEST_BYTES} bytes.")
 
         raw_body = self.rfile.read(content_length)
@@ -109,7 +119,26 @@ class SaharaHandler(BaseHTTPRequestHandler):
                 })
                 return
 
-            # 2. Get User Profile: GET /api/users/<user_id>
+            # 2. Phone Lookup for Discovery: GET /api/lookup/phone/<phone>
+            if path.startswith("/api/lookup/phone/"):
+                raw_phone = unquote(path[len("/api/lookup/phone/"):].strip())
+                if not raw_phone:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Missing phone number parameter."})
+                    return
+                try:
+                    with get_db(self.server.db_path) as conn:
+                        user = get_user_by_phone(conn, raw_phone)
+                except ValidationError as e:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+                    return
+                if not user:
+                    self.send_json(HTTPStatus.NOT_FOUND, {"error": "User with this phone number not found."})
+                    return
+                # Returns user_id, name, status (phone is omitted)
+                self.send_json(HTTPStatus.OK, user)
+                return
+
+            # 3. Get User Profile: GET /api/users/<user_id>
             if path.startswith("/api/users/"):
                 user_id = path[len("/api/users/"):].strip()
                 if not user_id:
@@ -182,6 +211,22 @@ class SaharaHandler(BaseHTTPRequestHandler):
                 with get_db(self.server.db_path) as conn:
                     result = create_or_update_user(conn, validated)
                 self.send_json(HTTPStatus.CREATED, result)
+                return
+
+            # 2. Update User Status: POST /api/users/<user_id>/status
+            if path.startswith("/api/users/") and path.endswith("/status"):
+                prefix = "/api/users/"
+                suffix = "/status"
+                user_id = path[len(prefix):-len(suffix)].strip()
+                if not user_id:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Missing user_id parameter in path."})
+                    return
+                if not isinstance(body, dict) or "status" not in body:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Field 'status' is required."})
+                    return
+                with get_db(self.server.db_path) as conn:
+                    result = update_user_status(conn, user_id, body["status"])
+                self.send_json(HTTPStatus.OK, result)
                 return
 
             # 2. Register Family Link: POST /api/family

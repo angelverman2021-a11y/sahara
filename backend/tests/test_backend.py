@@ -1,6 +1,6 @@
 """
 SAHARA Backend — Comprehensive Test Suite
-Validates all 9 core requirements using Python's standard library unittest and urllib.
+Validates all 9 core requirements plus phone discovery and auto-generated User ID.
 Standard library only (zero external pip packages).
 """
 
@@ -23,8 +23,10 @@ from backend.sync import (
     get_family_members,
     get_messages_for_user,
     get_user,
+    get_user_by_phone,
     sync_emergency_reports,
     sync_messages,
+    update_user_status,
     validate_emergency_report,
     validate_family,
     validate_message,
@@ -33,7 +35,7 @@ from backend.sync import (
 
 
 class TestSaharaBackendUnit(unittest.TestCase):
-    """Unit tests for validation, database persistence, TTL, and priority ordering."""
+    """Unit tests for validation, database persistence, TTL, priority ordering, and phone discovery."""
 
     def setUp(self):
         self.temp_db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -50,23 +52,61 @@ class TestSaharaBackendUnit(unittest.TestCase):
                 except OSError:
                     pass
 
-    # 1. Validation & User Creation
+    # 1. Validation & Auto-generated User ID
     def test_user_validation_and_creation(self):
         with get_db(self.db_path) as conn:
-            user = validate_user({"user_id": "U101", "name": "Aarav Sharma"})
+            # Registration without client providing user_id
+            user = validate_user({"name": "Aarav Sharma", "phone": "+919876543201", "status": "SAFE"})
             saved = create_or_update_user(conn, user)
-            self.assertEqual(saved["user_id"], "U101")
+            self.assertTrue(saved["user_id"].startswith("SH-"))
             self.assertEqual(saved["name"], "Aarav Sharma")
+            self.assertEqual(saved["status"], "SAFE")
 
-            fetched = get_user(conn, "U101")
+            # Verify retrieval by user_id
+            fetched = get_user(conn, saved["user_id"])
             self.assertIsNotNone(fetched)
             self.assertEqual(fetched["name"], "Aarav Sharma")
+            self.assertEqual(fetched["status"], "SAFE")
+
+    def test_phone_lookup_and_omission(self):
+        with get_db(self.db_path) as conn:
+            user = validate_user({"name": "Mother", "phone": "+919876543202", "status": "SAFE"})
+            saved = create_or_update_user(conn, user)
+
+            # Lookup by phone
+            profile = get_user_by_phone(conn, "+919876543202")
+            self.assertIsNotNone(profile)
+            self.assertEqual(profile["user_id"], saved["user_id"])
+            self.assertEqual(profile["name"], "Mother")
+            self.assertEqual(profile["status"], "SAFE")
+            # CRITICAL PRIVACY CHECK: phone number MUST NOT be in lookup response!
+            self.assertNotIn("phone", profile)
+
+    def test_user_status_update(self):
+        with get_db(self.db_path) as conn:
+            user = validate_user({"name": "Bikash Borah", "phone": "+919876543205", "status": "SAFE"})
+            saved = create_or_update_user(conn, user)
+            uid = saved["user_id"]
+
+            # Update status to SOS
+            updated = update_user_status(conn, uid, "SOS")
+            self.assertEqual(updated["status"], "SOS")
+
+            # Lookup reflects updated status
+            lookup = get_user_by_phone(conn, "+919876543205")
+            self.assertEqual(lookup["status"], "SOS")
+
+            # Invalid status rejected
+            with self.assertRaises(ValidationError):
+                update_user_status(conn, uid, "UNKNOWN_STATUS")
 
     def test_invalid_user_payloads(self):
         with self.assertRaises(ValidationError):
-            validate_user({"user_id": "", "name": "Test"})
+            validate_user({"name": "Test"})  # Missing phone
         with self.assertRaises(ValidationError):
-            validate_user({"user_id": "U1", "name": ""})
+            validate_user({"name": "", "phone": "+919876543201"})  # Empty name
+        with self.assertRaises(ValidationError):
+            validate_user({"name": "Test", "phone": "123"})  # Too short phone
         with self.assertRaises(ValidationError):
             validate_user("not a dict")
 
@@ -77,37 +117,37 @@ class TestSaharaBackendUnit(unittest.TestCase):
             with self.assertRaises(ValidationError) as ctx:
                 create_family_link(conn, {
                     "family_id": "F01",
-                    "user_id": "U101",
-                    "family_member_id": "U102",
+                    "user_id": "SH-9999",
+                    "family_member_id": "SH-8888",
                     "relationship": "Mother",
                 })
             self.assertIn("does not exist", str(ctx.exception))
 
-            # Now register both users
-            create_or_update_user(conn, {"user_id": "U101", "name": "Child", "created_at": 1000})
-            create_or_update_user(conn, {"user_id": "U102", "name": "Mother", "created_at": 1000})
+            # Register both users with backend-generated User IDs
+            u1 = create_or_update_user(conn, validate_user({"name": "Child", "phone": "+919876543211"}))
+            u2 = create_or_update_user(conn, validate_user({"name": "Mother", "phone": "+919876543212"}))
 
-            # Linking should now succeed
+            # Linking should now succeed using User IDs
             link = create_family_link(conn, {
                 "family_id": "F01",
-                "user_id": "U101",
-                "family_member_id": "U102",
+                "user_id": u1["user_id"],
+                "family_member_id": u2["user_id"],
                 "relationship": "Mother",
             })
             self.assertEqual(link["relationship"], "Mother")
 
             # Verify retrieval
-            members = get_family_members(conn, "U101")
+            members = get_family_members(conn, u1["user_id"])
             self.assertEqual(len(members), 1)
-            self.assertEqual(members[0]["family_member_id"], "U102")
+            self.assertEqual(members[0]["family_member_id"], u2["user_id"])
             self.assertEqual(members[0]["name"], "Mother")
 
     def test_family_self_linking_rejected(self):
         with self.assertRaises(ValidationError):
             validate_family({
                 "family_id": "F01",
-                "user_id": "U101",
-                "family_member_id": "U101",
+                "user_id": "SH-1010",
+                "family_member_id": "SH-1010",
                 "relationship": "Self",
             })
 
@@ -303,53 +343,80 @@ class TestSaharaBackendHTTPIntegration(unittest.TestCase):
         self.assertEqual(body["status"], "ok")
         self.assertTrue(body["wal"])
 
-    def test_02_register_and_get_user(self):
-        # Register user
+    def test_02_register_with_auto_generated_user_id(self):
+        # Client registers without choosing user_id
         status, body = self.make_request("POST", "/api/users", {
-            "user_id": "USER_PURI_01",
             "name": "Manas Mohapatra",
+            "phone": "+919876543211",
+            "status": "SAFE",
         })
         self.assertEqual(status, 201)
-        self.assertEqual(body["user_id"], "USER_PURI_01")
-
-        # Get user
-        status, body = self.make_request("GET", "/api/users/USER_PURI_01")
-        self.assertEqual(status, 200)
+        self.assertTrue(body["user_id"].startswith("SH-"))
         self.assertEqual(body["name"], "Manas Mohapatra")
+        self.assertEqual(body["status"], "SAFE")
 
-    def test_03_family_validation_and_link(self):
-        # Attempt to link with non-existent member
-        status, body = self.make_request("POST", "/api/family", {
-            "family_id": "FAM_01",
-            "user_id": "USER_PURI_01",
-            "family_member_id": "USER_PURI_99",  # Not registered
-            "relationship": "Brother",
-        })
-        self.assertEqual(status, 400)
-        self.assertIn("does not exist", body["error"])
+        # Save generated user_id for subsequent tests
+        self.__class__.user1_id = body["user_id"]
 
+    def test_03_phone_lookup_and_privacy(self):
+        # Search for user by phone
+        status, body = self.make_request("GET", "/api/lookup/phone/%2B919876543211")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["user_id"], self.__class__.user1_id)
+        self.assertEqual(body["name"], "Manas Mohapatra")
+        self.assertEqual(body["status"], "SAFE")
+        # Ensure phone number is NOT returned in response
+        self.assertNotIn("phone", body)
+
+        # Lookup non-existent phone
+        status, body = self.make_request("GET", "/api/lookup/phone/9999999999")
+        self.assertEqual(status, 404)
+
+    def test_04_update_user_status_http(self):
+        user_id = getattr(self.__class__, "user1_id", None)
+        if not user_id:
+            self.skipTest("user1_id not available (test_02 skipped)")
+        # Update status to NEEDS_HELP
+        status, body = self.make_request(
+            "POST",
+            f"/api/users/{user_id}/status",
+            {"status": "NEEDS_HELP"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "NEEDS_HELP")
+
+        # Phone lookup now reflects new status
+        status, body = self.make_request("GET", "/api/lookup/phone/%2B919876543211")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "NEEDS_HELP")
+
+    def test_05_family_validation_and_link(self):
         # Register second user
-        self.make_request("POST", "/api/users", {
-            "user_id": "USER_PURI_02",
+        status, body = self.make_request("POST", "/api/users", {
             "name": "Smruti Mohapatra",
+            "phone": "+919876543212",
+            "status": "SAFE",
         })
+        self.assertEqual(status, 201)
+        user2_id = body["user_id"]
 
-        # Link successfully
+        # Link successfully using the backend-generated User IDs
         status, body = self.make_request("POST", "/api/family", {
             "family_id": "FAM_01",
-            "user_id": "USER_PURI_01",
-            "family_member_id": "USER_PURI_02",
+            "user_id": self.__class__.user1_id,
+            "family_member_id": user2_id,
             "relationship": "Sister",
         })
         self.assertEqual(status, 201)
 
         # Query family members
-        status, body = self.make_request("GET", "/api/family/USER_PURI_01")
+        status, body = self.make_request("GET", f"/api/family/{self.__class__.user1_id}")
         self.assertEqual(status, 200)
         self.assertEqual(len(body), 1)
+        self.assertEqual(body[0]["family_member_id"], user2_id)
         self.assertEqual(body[0]["relationship"], "Sister")
 
-    def test_04_sync_messages_and_deduplication(self):
+    def test_06_sync_messages_and_deduplication(self):
         messages = [
             {
                 "message_id": "MSG_CYCLONE_1",
@@ -382,7 +449,7 @@ class TestSaharaBackendHTTPIntegration(unittest.TestCase):
         self.assertEqual(len(body), 1)
         self.assertEqual(body[0]["message_id"], "MSG_CYCLONE_1")
 
-    def test_05_emergency_sync_and_feed(self):
+    def test_07_emergency_sync_and_feed(self):
         reports = [
             {
                 "report_id": "EMERG_01",
@@ -402,7 +469,7 @@ class TestSaharaBackendHTTPIntegration(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(any(r["report_id"] == "EMERG_01" for r in body))
 
-    def test_06_oversized_payload_returns_413(self):
+    def test_08_oversized_payload_returns_413(self):
         # Generate payload larger than 256 KB (e.g. 270 KB)
         oversized_bytes = b"{" + b"A" * (MAX_REQUEST_BYTES + 5000) + b"}"
         status, body = self.make_request("POST", "/api/sync/messages", data=oversized_bytes)

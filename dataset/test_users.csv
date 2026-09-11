@@ -1,9 +1,9 @@
-user_id,name,node_id,device_model,initial_battery
-U001,Aarav Sharma,NODE_A01,Redmi 9A,82%
-U002,Sunita Devi,NODE_B02,Realme C11,64%
-U003,Ramesh Kumar,NODE_C03,Samsung Galaxy M02,45%
-U004,Priya Das,NODE_D04,Moto E7 Power,91%
-U005,Bikash Borah,NODE_E05,Vivo Y12s,28%
-U006,Lakshmi Patel,NODE_F06,Infinix Smart 5,55%
-U007,Manoj Soren,NODE_G07,Micromax In 2b,73%
-U008,Deepika Roy,NODE_H08,Redmi 10A,39%
+user_id,name,phone,status,node_id,device_model,initial_battery
+SH-A01,Aarav Sharma,+919876543201,SAFE,NODE_A01,Redmi 9A,82%
+SH-B02,Sunita Devi,+919876543202,SAFE,NODE_B02,Realme C11,64%
+SH-C03,Ramesh Kumar,+919876543203,NEEDS_HELP,NODE_C03,Samsung Galaxy M02,45%
+SH-D04,Priya Das,+919876543204,SAFE,NODE_D04,Moto E7 Power,91%
+SH-E05,Bikash Borah,+919876543205,SOS,NODE_E05,Vivo Y12s,28%
+SH-F06,Lakshmi Patel,+919876543206,SAFE,NODE_F06,Infinix Smart 5,55%
+SH-G07,Manoj Soren,+919876543207,OFFLINE,NODE_G07,Micromax In 2b,73%
+SH-H08,Deepika Roy,+919876543208,SAFE,NODE_H08,Redmi 10A,39%

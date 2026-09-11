@@ -3,6 +3,8 @@ SAHARA Backend — Business Logic, Strict Validation & Deduplication Engine
 Standard library only (zero external pip packages).
 """
 
+import secrets
+import string
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -10,6 +12,7 @@ VALID_MESSAGE_TYPES = {"SOS", "EMERGENCY", "FAMILY", "BROADCAST", "STATUS"}
 VALID_PRIORITIES = {"Highest", "High", "Normal"}
 VALID_STATUSES = {"PENDING", "SYNCED", "DELIVERED"}
 VALID_EMERGENCY_TYPES = {"SOS", "HAZARD", "EVACUATION", "EMERGENCY"}
+VALID_USER_STATUSES = {"SAFE", "NEEDS_HELP", "SOS", "OFFLINE"}
 
 MAX_CONTENT_LENGTH = 2048  # Max 2 KB per message/report content
 
@@ -19,6 +22,26 @@ class ValidationError(Exception):
     pass
 
 
+def normalize_phone(phone: Any) -> str:
+    """Normalizes phone number to digits with optional leading +."""
+    if not isinstance(phone, str):
+        raise ValidationError("Phone number must be a string.")
+    cleaned = "".join(ch for ch in phone.strip() if ch.isdigit() or ch == "+")
+    if "+" in cleaned and not cleaned.startswith("+"):
+        raise ValidationError("Invalid phone number format: '+' must be at the beginning.")
+    digits_only = cleaned.lstrip("+")
+    if not (10 <= len(digits_only) <= 15 and digits_only.isdigit()):
+        raise ValidationError("Phone number must contain between 10 and 15 digits.")
+    return cleaned
+
+
+def generate_user_id() -> str:
+    """Generates a clean SAHARA User ID like SH-82K4."""
+    chars = string.ascii_uppercase + string.digits
+    code = "".join(secrets.choice(chars) for _ in range(4))
+    return f"SH-{code}"
+
+
 # ---------------------------------------------------------------------------
 # Strict Validation Handlers
 # ---------------------------------------------------------------------------
@@ -26,18 +49,27 @@ class ValidationError(Exception):
 def validate_user(data: Any) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValidationError("Payload must be a JSON object.")
-    
-    user_id = data.get("user_id")
-    if not isinstance(user_id, str) or not user_id.strip():
-        raise ValidationError("Field 'user_id' is required and must be a non-empty string.")
-    if len(user_id) > 64:
-        raise ValidationError("Field 'user_id' cannot exceed 64 characters.")
 
     name = data.get("name")
     if not isinstance(name, str) or not name.strip():
         raise ValidationError("Field 'name' is required and must be a non-empty string.")
     if len(name) > 128:
         raise ValidationError("Field 'name' cannot exceed 128 characters.")
+
+    phone = data.get("phone")
+    if not phone:
+        raise ValidationError("Field 'phone' is required for registration.")
+    normalized_phone = normalize_phone(phone)
+
+    status = data.get("status", "SAFE")
+    if status not in VALID_USER_STATUSES:
+        raise ValidationError(f"Invalid 'status' '{status}'. Must be one of {sorted(VALID_USER_STATUSES)}.")
+
+    user_id = data.get("user_id")
+    if user_id is not None:
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValidationError("Field 'user_id' must be a non-empty string if provided.")
+        user_id = user_id.strip()
 
     created_at = data.get("created_at")
     if created_at is not None:
@@ -47,8 +79,10 @@ def validate_user(data: Any) -> Dict[str, Any]:
         created_at = int(time.time())
 
     return {
-        "user_id": user_id.strip(),
+        "user_id": user_id,
         "name": name.strip(),
+        "phone": normalized_phone,
+        "status": status,
         "created_at": created_at,
     }
 
@@ -189,28 +223,102 @@ def validate_emergency_report(data: Any) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def create_or_update_user(conn, validated_user: Dict[str, Any]) -> Dict[str, Any]:
-    """Inserts or updates a user profile."""
+    """
+    Registers or updates a user profile.
+    Automatically generates a unique User ID if not provided.
+    """
     cursor = conn.cursor()
+    phone = validated_user["phone"]
+    now = int(time.time())
+
+    # If phone already registered, update name and status
+    cursor.execute("SELECT user_id, name, status, created_at FROM users WHERE phone = ?;", (phone,))
+    existing = cursor.fetchone()
+    if existing:
+        user_id = existing["user_id"]
+        cursor.execute(
+            """
+            UPDATE users SET name = ?, status = ?, updated_at = ?
+            WHERE user_id = ?;
+            """,
+            (validated_user["name"], validated_user["status"], now, user_id),
+        )
+        return {
+            "user_id": user_id,
+            "name": validated_user["name"],
+            "status": validated_user["status"],
+        }
+
+    # Generate unique user_id if not explicitly provided
+    user_id = validated_user.get("user_id")
+    if not user_id:
+        while True:
+            candidate_id = generate_user_id()
+            cursor.execute("SELECT 1 FROM users WHERE user_id = ?;", (candidate_id,))
+            if not cursor.fetchone():
+                user_id = candidate_id
+                break
+
     cursor.execute(
         """
-        INSERT INTO users (user_id, name, created_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            name = excluded.name;
+        INSERT INTO users (user_id, phone, name, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?);
         """,
-        (validated_user["user_id"], validated_user["name"], validated_user["created_at"]),
+        (user_id, phone, validated_user["name"], validated_user["status"], validated_user["created_at"], now),
     )
-    return validated_user
+    return {
+        "user_id": user_id,
+        "name": validated_user["name"],
+        "status": validated_user["status"],
+    }
 
 
 def get_user(conn, user_id: str) -> Optional[Dict[str, Any]]:
-    """Retrieves a user by user_id."""
+    """Retrieves a user profile by user_id."""
     cursor = conn.cursor()
-    cursor.execute("SELECT user_id, name, created_at FROM users WHERE user_id = ?;", (user_id,))
+    cursor.execute("SELECT user_id, name, status, created_at FROM users WHERE user_id = ?;", (user_id,))
     row = cursor.fetchone()
     if not row:
         return None
     return dict(row)
+
+
+def get_user_by_phone(conn, raw_phone: str) -> Optional[Dict[str, Any]]:
+    """
+    Looks up a user by phone number.
+    Returns:
+      {"user_id": "...", "name": "...", "status": "..."}
+    Phone number is omitted from the response.
+    """
+    phone = normalize_phone(raw_phone)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, name, status FROM users WHERE phone = ?;", (phone,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "name": row["name"],
+        "status": row["status"],
+    }
+
+
+def update_user_status(conn, user_id: str, new_status: str) -> Dict[str, Any]:
+    """Updates a user's situational status (SAFE, NEEDS_HELP, SOS, OFFLINE)."""
+    if new_status not in VALID_USER_STATUSES:
+        raise ValidationError(f"Invalid 'status' '{new_status}'. Must be one of {sorted(VALID_USER_STATUSES)}.")
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, name FROM users WHERE user_id = ?;", (user_id,))
+    user = cursor.fetchone()
+    if not user:
+        raise ValidationError(f"User '{user_id}' does not exist.")
+    now = int(time.time())
+    cursor.execute("UPDATE users SET status = ?, updated_at = ? WHERE user_id = ?;", (new_status, now, user_id))
+    return {
+        "user_id": user_id,
+        "name": user["name"],
+        "status": new_status,
+    }
 
 
 def create_family_link(conn, validated_family: Dict[str, Any]) -> Dict[str, Any]:
