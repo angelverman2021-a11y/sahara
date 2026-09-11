@@ -49,7 +49,7 @@
 
 ---
 
-## 🌵 About Sahara
+##  About Sahara
 
 **Sahara** is an offline emergency communication and disaster response network engineered to function when cellular networks and internet connectivity fail. Utilizing peer-to-peer mesh networking, local signal relays, and intelligent distress message routing, Sahara ensures **SOS alerts**, **vital telemetry**, and **location data** reach emergency responders during critical blackouts.
 
@@ -57,7 +57,7 @@
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
 <p align="center">
   <img src="assets/sahara_features_banner.jpg" alt="Sahara Key Features" width="100%">
@@ -74,7 +74,7 @@
 
 ---
 
-## 📱 App Preview
+##  App Preview
 
 <p align="center">
   <img src="assets/sahara_app_screens.jpg" alt="Sahara App Screens — SOS, Messaging, Mesh Map" width="100%">
@@ -87,7 +87,7 @@
 ---
 
 <a id="architecture"></a>
-## 🌐 How Sahara Works
+##  How Sahara Works
 
 ```mermaid
 %%{init: {
@@ -150,7 +150,7 @@ graph TD
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 <p align="center">
   <img src="assets/sahara_tech_stack.jpg" alt="Sahara Tech Stack" width="100%">
@@ -160,28 +160,28 @@ graph TD
 
 | Technology | Role | Version |
 |---|---|---|
-| 🐦 **Flutter** | Cross-platform mobile UI | 3.x |
-| 🎯 **Dart** | Primary app language | 3.x |
+|  **Flutter** | Cross-platform mobile UI | 3.x |
+|  **Dart** | Primary app language | 3.x |
 
 ### Backend & Mesh Engine
 
 | Technology | Role | Version |
 |---|---|---|
-| 🐍 **Python** | Mesh routing, data processing & analytics | 3.10+ |
-| 🔌 **WebSockets** | Real-time bidirectional node sync | RFC 6455 |
-| 📡 **LoRa** | Long-range, low-power RF communication | — |
-| 📶 **Wi-Fi Direct** | Peer-to-peer direct device connectivity | — |
+|  **Python** | Mesh routing, data processing & analytics | 3.10+ |
+|  **WebSockets** | Real-time bidirectional node sync | RFC 6455 |
+|  **LoRa** | Long-range, low-power RF communication | — |
+|  **Wi-Fi Direct** | Peer-to-peer direct device connectivity | — |
 
 ### Security
 
 | Technology | Role |
 |---|---|
-| 🔒 **AES-256 + ECDH** | End-to-end message encryption |
-| 📍 **GPS / Fused Location** | Precise distress location broadcasting |
+|  **AES-256 + ECDH** | End-to-end message encryption |
+|  **GPS / Fused Location** | Precise distress location broadcasting |
 
 ---
 
-## 📊 Performance
+##  Performance
 
 <p align="center">
   <img src="assets/sahara_performance_stats.jpg" alt="Sahara Performance Stats" width="100%">
@@ -265,20 +265,6 @@ python main.py
   Built with ❤️ at <strong>MUJ Hackathon 2026</strong>
 </p>
 
----
-
-## 🗺️ Roadmap
-
-- [x] Core P2P mesh messaging
-- [x] SOS beacon with GPS broadcasting
-- [x] End-to-end encryption
-- [x] Mermaid architecture documentation
-- [ ] LoRa hardware integration
-- [ ] Battery optimization (background service)
-- [ ] Multi-language support
-- [ ] Offline map tiles (no internet map rendering)
-- [ ] Relay node auto-discovery protocol
-- [ ] Rescue team dashboard web interface
 
 ---
 
