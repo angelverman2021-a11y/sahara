@@ -1,0 +1,7 @@
+# SAHARA Screens
+# Minimalist emergency screens:
+# - HomeScreen (Status, Quick Actions)
+# - SosScreen (One-tap distress dispatch)
+# - MessagesScreen (P2P messaging)
+# - FamilyScreen (Node reachability & hops)
+# - BroadcastScreen (Disaster alert broadcast)

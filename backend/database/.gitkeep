@@ -1,0 +1,6 @@
+# SAHARA Backend Database
+# Database schema definitions:
+# - users table
+# - families table
+# - messages table
+# - emergency_reports table

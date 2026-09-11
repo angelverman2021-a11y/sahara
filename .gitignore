@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Build and IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node / Backend
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Flutter / Dart / Android
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+
+# Environment variables
+.env
+.env.local

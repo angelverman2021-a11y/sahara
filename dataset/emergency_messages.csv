@@ -1,0 +1,11 @@
+message_id,category,priority,content,suggested_action
+EM001,SOS,Highest,URGENT: Family trapped on roof due to rising water level. 4 members including infant.,Immediate boat rescue required
+EM002,SOS,Highest,Medical emergency: Severe fracture and elderly diabetic person needs insulin.,Dispatch medical rescue team
+EM003,EMERGENCY,High,Main bridge connecting Block B to Highway 31 submerged. Do not cross.,Take eastern detour via Ridge Road
+EM004,EMERGENCY,High,Cyclone landfall expected in 2 hours. Move away from tin roofs to concrete shelter.,Relocate to primary school shelter
+EM005,BROADCAST,High,Relief camp operational at Community Center Ward 4 with drinking water and food.,Direct displaced persons to camp
+EM006,BROADCAST,High,High-voltage electrical pole collapsed on Railway Crossing Road. Electrocution hazard.,Avoid railway crossing corridor
+EM007,FAMILY,Medium,I am safe at cyclone shelter 3. Looking for Rahul and Ananya.,Check shelter registry desk
+EM008,FAMILY,Medium,Moved to Panchayat Bhavan upper floor. Water at 5 feet on ground.,Stay in place until water recedes
+EM009,STATUS,Low,Mobile towers down in sector 9. Running on battery saver.,Conserve device battery
+EM010,STATUS,Low,Rain stopped in north zone. Water draining slowly towards canal.,Monitor water gauges

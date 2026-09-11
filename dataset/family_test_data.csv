@@ -1,0 +1,11 @@
+family_id,user_id,family_member_id,relationship
+F001,U001,U002,Mother
+F001,U001,U003,Father
+F001,U002,U001,Son
+F001,U002,U003,Spouse
+F001,U003,U001,Son
+F001,U003,U002,Spouse
+F002,U004,U005,Brother
+F002,U005,U004,Sister
+F003,U006,U007,Spouse
+F003,U007,U006,Spouse

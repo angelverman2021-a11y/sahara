@@ -1,0 +1,11 @@
+disaster_id,disaster_type,state,district,location,start_date,end_date,severity,affected_population
+D001,Flood,Assam,Barpeta,Barpeta Town & Mandia Block,2024-06-15,2024-07-02,High,450000
+D002,Cyclone,Odisha,Puri,Puri Coastal Belt & Brahmagiri,2024-05-24,2024-05-28,Critical,620000
+D003,Flood,Bihar,Darbhanga,Kusheshwar Asthan,2024-07-10,2024-07-28,High,380000
+D004,Cyclone,West Bengal,South 24 Parganas,Sundarbans Delta,2024-05-25,2024-05-29,Critical,510000
+D005,Flood,Kerala,Wayanad,Meppadi & Chooralmala,2024-07-30,2024-08-12,Extreme,120000
+D006,Cyclone,Andhra Pradesh,Visakhapatnam,Bheemunipatnam Coast,2023-12-03,2023-12-07,High,290000
+D007,Flood,Assam,Dhubri,Gauripur & Bilasipara,2024-06-20,2024-07-08,High,310000
+D008,Cyclone,Tamil Nadu,Chennai,North Chennai & Ennore,2023-12-02,2023-12-06,Critical,850000
+D009,Flood,Odisha,Cuttack,Mahanadi River Basin,2024-08-18,2024-08-27,Moderate,175000
+D010,Cyclone,Gujarat,Kutch,Mandvi & Jakhau Port,2023-06-12,2023-06-17,Critical,420000
