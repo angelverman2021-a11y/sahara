@@ -11,6 +11,7 @@ import '../utils/broadcast_localizer.dart';
 import 'emergency_service.dart';
 import 'mesh_service.dart';
 import 'native_bridge.dart';
+import 'notification_service.dart';
 
 
 class MockService extends EmergencyService {
@@ -734,6 +735,13 @@ class MockService extends EmergencyService {
   void addAnnouncement(EmergencyAnnouncement announcement) {
     _announcements.insert(0, announcement);
     notifyListeners();
+
+    NotificationService().showEmergencyBroadcastNotification(
+      title: announcement.title,
+      message: announcement.message,
+      severity: announcement.severity,
+      id: announcement.id,
+    );
   }
 
   @override
@@ -837,6 +845,13 @@ class MockService extends EmergencyService {
       ),
     );
 
+    NotificationService().showEmergencyBroadcastNotification(
+      title: 'EMERGENCY DISTRESS BEACON',
+      message: 'Assistance needed at current location ($coords).',
+      severity: AnnouncementSeverity.evacuation,
+      id: 'sos_${DateTime.now().millisecondsSinceEpoch}',
+    );
+
     notifyListeners();
 
     final ms = meshService;
@@ -855,6 +870,37 @@ class MockService extends EmergencyService {
       lastSynced: DateTime.now(),
     );
     notifyListeners();
+  }
+
+  /// Simulates receiving an incoming offline mesh message from a family member
+  void receiveFamilyMessage({
+    required String senderId,
+    required String content,
+  }) {
+    final sender = getPersonById(senderId);
+    final senderName = sender?.name ?? 'Family Member';
+    final list = _messages.putIfAbsent(senderId, () => []);
+    final newMessage = Message(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      senderId: senderId,
+      receiverId: 'me',
+      senderName: senderName,
+      content: content.trim(),
+      timestamp: DateTime.now(),
+      type: MessageType.text,
+      priority: MessagePriority.normal,
+      isDelivered: true,
+      isFromMe: false,
+      hops: sender?.hops ?? 1,
+    );
+    list.add(newMessage);
+    notifyListeners();
+
+    NotificationService().showFamilyMessageNotification(
+      senderName: senderName,
+      content: content.trim(),
+      personId: senderId,
+    );
   }
 
   @override
@@ -904,6 +950,20 @@ class MockService extends EmergencyService {
       });
     } else {
       debugPrint('[SAHARA SEND] MeshService is not attached, message saved in local store only');
+    }
+
+    // If sent to a family member, simulate incoming response after brief delay
+    // to verify family notifications in background or testing
+    final person = getPersonById(receiverId);
+    if (person != null && person.relation == PersonRelation.family) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (_people.any((p) => p.id == receiverId)) {
+          receiveFamilyMessage(
+            senderId: receiverId,
+            content: 'Received your message over mesh. We are safe and staying in shelter.',
+          );
+        }
+      });
     }
   }
 

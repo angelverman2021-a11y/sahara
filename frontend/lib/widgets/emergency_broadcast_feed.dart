@@ -15,6 +15,143 @@ class EmergencyBroadcastFeed extends StatelessWidget {
     required this.onSendBroadcast,
   });
 
+  void _showBroadcastDetail(BuildContext context, EmergencyAnnouncement announcement) {
+    final service = EmergencyServiceScope.of(context);
+    final langCode = AppLocalizations.codeForLanguage(service.selectedLanguage);
+
+    Color badgeBg;
+    Color badgeText;
+    Color badgeBorder;
+    String label;
+
+    switch (announcement.severity) {
+      case AnnouncementSeverity.evacuation:
+        badgeBg = AppTheme.emergencyRedLight;
+        badgeText = AppTheme.emergencyRed;
+        badgeBorder = AppTheme.emergencyRedBorder;
+        label = context.tr('severity_evacuation').toUpperCase();
+        break;
+      case AnnouncementSeverity.warning:
+        badgeBg = AppTheme.relayAmberLight;
+        badgeText = AppTheme.relayAmber;
+        badgeBorder = AppTheme.relayAmberBorder;
+        label = context.tr('severity_warning').toUpperCase();
+        break;
+      case AnnouncementSeverity.advisory:
+        badgeBg = AppTheme.blueSurfaceTint;
+        badgeText = AppTheme.secondaryBlue;
+        badgeBorder = AppTheme.lightBlue;
+        label = context.tr('severity_advisory').toUpperCase();
+        break;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radius),
+            side: const BorderSide(color: AppTheme.surfaceBorder),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(AppTheme.radius),
+                  border: Border.all(color: badgeBorder, width: 0.8),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: badgeText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  announcement.localizedTitle(langCode),
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.source_outlined, size: 14, color: AppTheme.textMuted),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        announcement.localizedSource(langCode),
+                        style: const TextStyle(
+                          fontFamily: AppTheme.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      announcement.timeAgo,
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontFamily,
+                        fontSize: 11.5,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Text(
+                  announcement.localizedMessage(langCode),
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontSize: 14,
+                    color: AppTheme.textPrimary,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.primaryNavy,
+              ),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -69,6 +206,7 @@ class EmergencyBroadcastFeed extends StatelessWidget {
 
         // Announcement Feed Container
         Container(
+          constraints: const BoxConstraints(maxHeight: 260),
           decoration: BoxDecoration(
             color: AppTheme.surface,
             borderRadius: BorderRadius.circular(AppTheme.radius),
@@ -88,18 +226,24 @@ class EmergencyBroadcastFeed extends StatelessWidget {
                     ),
                   ),
                 )
-              : Column(
-                  children: [
-                    for (int i = 0; i < announcements.length; i++) ...[
-                      if (i > 0)
-                        const Divider(
-                          height: 1,
-                          thickness: 1,
-                          color: AppTheme.surfaceBorder,
-                        ),
-                      _buildAnnouncementRow(context, announcements[i]),
-                    ],
-                  ],
+              : Scrollbar(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: announcements.length,
+                    separatorBuilder: (context, index) => const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppTheme.surfaceBorder,
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = announcements[index];
+                      return InkWell(
+                        onTap: () => _showBroadcastDetail(context, item),
+                        borderRadius: BorderRadius.circular(AppTheme.radius),
+                        child: _buildAnnouncementRow(context, item),
+                      );
+                    },
+                  ),
                 ),
         ),
         const SizedBox(height: 10),
@@ -234,6 +378,8 @@ class EmergencyBroadcastFeed extends StatelessWidget {
               color: AppTheme.textSecondary,
               height: 1.35,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

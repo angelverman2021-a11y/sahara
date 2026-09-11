@@ -72,6 +72,9 @@ class MessagePacket {
   /// Delivery/sync status: 'PENDING', 'SYNCED', 'DELIVERED'
   final String status;
 
+  /// Optional human display name of the sender (e.g., "Shreya Arora")
+  final String? senderName;
+
   const MessagePacket({
     required this.messageId,
     required this.senderId,
@@ -84,6 +87,7 @@ class MessagePacket {
     required this.timestamp,
     required this.ttl,
     this.status = MessageStatus.pending,
+    this.senderName,
   });
 
   /// Maximum allowed payload characters (2 KB constraint)
@@ -103,6 +107,7 @@ class MessagePacket {
       timestamp: timestamp,
       ttl: ttl - 1,
       status: status,
+      senderName: senderName,
     );
   }
 
@@ -110,6 +115,7 @@ class MessagePacket {
   MessagePacket copyWith({
     String? status,
     int? ttl,
+    String? senderName,
   }) {
     return MessagePacket(
       messageId: messageId,
@@ -123,12 +129,13 @@ class MessagePacket {
       timestamp: timestamp,
       ttl: ttl ?? this.ttl,
       status: status ?? this.status,
+      senderName: senderName ?? this.senderName,
     );
   }
 
   /// Serializes packet to JSON map for over-the-air transmission or SQLite storage.
   Map<String, dynamic> toJson() {
-    return {
+    final map = <String, dynamic>{
       'message_id': messageId,
       'sender_id': senderId,
       'receiver_id': receiverId,
@@ -141,6 +148,10 @@ class MessagePacket {
       'ttl': ttl,
       'status': status,
     };
+    if (senderName != null && senderName!.isNotEmpty) {
+      map['sender_name'] = senderName;
+    }
+    return map;
   }
 
   /// Serializes packet directly to UTF-8 JSON bytes.
@@ -162,6 +173,7 @@ class MessagePacket {
       timestamp: (json['timestamp'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
       ttl: (json['ttl'] as num?)?.toInt() ?? 8,
       status: json['status'] as String? ?? MessageStatus.pending,
+      senderName: json['sender_name'] as String?,
     );
   }
 

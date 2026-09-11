@@ -302,7 +302,12 @@ class MeshService {
     } else if (packet.type == MessageType.text) {
       _handleDirectTextPacket(fromPeerId, packet);
     } else {
-      debugPrint('[SAHARA DROP] Unknown packet type: ${packet.type}');
+      // General direct delivery for system/handshake/status packets
+      if (packet.receiverNodeId == myNodeId || packet.receiverNodeId == 'BROADCAST') {
+        _messageController.add(packet.copyWith(status: MessageStatus.delivered));
+      } else {
+        debugPrint('[SAHARA DROP] Unknown packet type: ${packet.type}');
+      }
     }
   }
 
@@ -341,11 +346,13 @@ class MeshService {
   }
 
   /// DIRECT TEXT: Person-to-person communication.
-  /// Delivers to local chat ONLY when receiverNodeId matches myNodeId (or receiverId matches myUserId).
+  /// Delivers to local chat ONLY when receiver matches myNodeId, myUserId, or BROADCAST.
   /// Intermediate nodes forward silently without displaying in their chat.
   void _handleDirectTextPacket(String fromPeerId, MessagePacket packet) {
     final isForMe = packet.receiverNodeId.trim().toUpperCase() == myNodeId.trim().toUpperCase() ||
-        (packet.receiverId.isNotEmpty && packet.receiverId.trim().toUpperCase() == myUserId.trim().toUpperCase());
+        (packet.receiverId.isNotEmpty && packet.receiverId.trim().toUpperCase() == myUserId.trim().toUpperCase()) ||
+        packet.receiverNodeId.trim().toUpperCase() == myUserId.trim().toUpperCase() ||
+        packet.receiverNodeId == 'BROADCAST';
 
     debugPrint('[SAHARA ROUTE] Destination check for ${packet.messageId}: destNode="${packet.receiverNodeId}" vs myNode="$myNodeId", destUser="${packet.receiverId}" vs myUser="$myUserId", match=$isForMe');
 
@@ -467,8 +474,10 @@ class MeshService {
     required String receiverNodeId,
     required String receiverUserId,
     required String content,
+    String? senderName,
     String priority = MessagePriority.normal,
     int ttl = 8,
+    String? messageId,
   }) async {
     // Ensure receiverId is a genuine SAHARA user_id (SH-XXXX), not a node_id
     String resolvedReceiverUserId = receiverUserId.trim();
@@ -487,7 +496,7 @@ class MeshService {
     }
 
     final packet = MessagePacket(
-      messageId: _generateMessageId(),
+      messageId: messageId ?? _generateMessageId(),
       senderId: resolvedSenderUserId,
       receiverId: resolvedReceiverUserId,
       senderNodeId: myNodeId,
@@ -498,6 +507,7 @@ class MeshService {
       timestamp: DateTime.now().millisecondsSinceEpoch,
       ttl: ttl,
       status: MessageStatus.pending,
+      senderName: senderName,
     );
 
     debugPrint('[SAHARA PACKET] Outgoing MessagePacket created:');
@@ -562,11 +572,13 @@ class MeshService {
   /// Sends an emergency broadcast to all reachable civilian nodes.
   Future<void> sendEmergencyBroadcast({
     required String content,
+    String? senderName,
     String priority = MessagePriority.high,
     int ttl = 8,
+    String? messageId,
   }) async {
     final packet = MessagePacket(
-      messageId: _generateMessageId(),
+      messageId: messageId ?? _generateMessageId(),
       senderId: myUserId,
       receiverId: 'BROADCAST',
       senderNodeId: myNodeId,
@@ -577,6 +589,7 @@ class MeshService {
       timestamp: DateTime.now().millisecondsSinceEpoch,
       ttl: ttl,
       status: MessageStatus.pending,
+      senderName: senderName,
     );
 
     _recordSeenMessageId(packet.messageId);
@@ -600,14 +613,16 @@ class MeshService {
   Future<void> sendSosAlert({
     String? location,
     required String details,
+    String? senderName,
     int ttl = 10,
+    String? messageId,
   }) async {
     final payloadContent = location != null && location.isNotEmpty
         ? 'LOCATION: $location | $details'
         : details;
 
     final packet = MessagePacket(
-      messageId: _generateMessageId(),
+      messageId: messageId ?? _generateMessageId(),
       senderId: myUserId,
       receiverId: 'BROADCAST',
       senderNodeId: myNodeId,
@@ -618,6 +633,7 @@ class MeshService {
       timestamp: DateTime.now().millisecondsSinceEpoch,
       ttl: ttl,
       status: MessageStatus.pending,
+      senderName: senderName,
     );
 
     _recordSeenMessageId(packet.messageId);

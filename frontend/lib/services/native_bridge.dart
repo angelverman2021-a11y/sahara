@@ -104,4 +104,69 @@ class NativeBridge {
       await _channel.invokeMethod('clearProfile');
     } catch (_) {}
   }
+
+  /// Checks if required Bluetooth & Location runtime permissions are granted
+  static Future<bool> checkBluetoothPermissions() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? granted = await _channel.invokeMethod<bool>('checkBluetoothPermissions');
+      return granted ?? false;
+    } on MissingPluginException {
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Requests required Bluetooth & Location runtime permissions
+  static Future<bool> requestBluetoothPermissions() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? granted = await _channel.invokeMethod<bool>('requestBluetoothPermissions');
+      return granted ?? false;
+    } on MissingPluginException {
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if device Bluetooth hardware is currently enabled
+  static Future<bool> isBluetoothEnabled() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? enabled = await _channel.invokeMethod<bool>('isBluetoothEnabled');
+      return enabled ?? false;
+    } on MissingPluginException {
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Prompts user to enable Bluetooth
+  static Future<bool> enableBluetooth() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? success = await _channel.invokeMethod<bool>('enableBluetooth');
+      return success ?? false;
+    } on MissingPluginException {
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if device location services (GPS/Network) are active
+  static Future<bool> isLocationEnabled() async {
+    if (!isAndroidDevice) return true;
+    try {
+      final bool? enabled = await _channel.invokeMethod<bool>('isLocationEnabled');
+      return enabled ?? false;
+    } on MissingPluginException {
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }

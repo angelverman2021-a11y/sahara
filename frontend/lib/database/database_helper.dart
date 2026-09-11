@@ -22,10 +22,12 @@ class DatabaseHelper {
   // ---------------------------------------------------------------------------
 
   static const String _dbName = 'offline_messages.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
 
   static const String _messagesTable = 'messages';
   static const String _seenMessagesTable = 'seen_messages';
+  static const String _emergencyTable = 'emergency_reports';
+  static const String _contactsTable = 'contacts';
 
   /// The single shared instance of [DatabaseHelper].
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -64,10 +66,6 @@ class DatabaseHelper {
   }
 
   /// Called the first time the database file is created.
-  ///
-  /// Sets up:
-  /// 1. `messages`: Stores [MessagePacket] with physical node IDs and hop-count TTL.
-  /// 2. `seen_messages`: Stores seen message IDs for persistent deduplication.
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE $_messagesTable (
@@ -91,11 +89,71 @@ class DatabaseHelper {
         seen_at    INTEGER NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE $_emergencyTable (
+        report_id   TEXT    PRIMARY KEY NOT NULL,
+        sender_id   TEXT    NOT NULL,
+        type        TEXT    NOT NULL,
+        location    TEXT,
+        priority    TEXT    NOT NULL,
+        details     TEXT    NOT NULL,
+        timestamp   INTEGER NOT NULL,
+        status      TEXT    NOT NULL DEFAULT 'PENDING'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE $_contactsTable (
+        id                 TEXT    PRIMARY KEY NOT NULL,
+        name               TEXT    NOT NULL,
+        relation           TEXT    NOT NULL,
+        status             TEXT    NOT NULL,
+        hops               INTEGER NOT NULL DEFAULT 1,
+        last_seen          TEXT    NOT NULL,
+        location_available INTEGER NOT NULL DEFAULT 0,
+        last_known_location TEXT   NOT NULL,
+        coordinates        TEXT,
+        phone_number       TEXT,
+        user_id            TEXT,
+        node_id            TEXT
+      )
+    ''');
   }
 
   /// Called when [_dbVersion] is bumped in a future release.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Reserved for future schema migrations.
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_emergencyTable (
+          report_id   TEXT    PRIMARY KEY NOT NULL,
+          sender_id   TEXT    NOT NULL,
+          type        TEXT    NOT NULL,
+          location    TEXT,
+          priority    TEXT    NOT NULL,
+          details     TEXT    NOT NULL,
+          timestamp   INTEGER NOT NULL,
+          status      TEXT    NOT NULL DEFAULT 'PENDING'
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_contactsTable (
+          id                 TEXT    PRIMARY KEY NOT NULL,
+          name               TEXT    NOT NULL,
+          relation           TEXT    NOT NULL,
+          status             TEXT    NOT NULL,
+          hops               INTEGER NOT NULL DEFAULT 1,
+          last_seen          TEXT    NOT NULL,
+          location_available INTEGER NOT NULL DEFAULT 0,
+          last_known_location TEXT   NOT NULL,
+          coordinates        TEXT,
+          phone_number       TEXT,
+          user_id            TEXT,
+          node_id            TEXT
+        )
+      ''');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -231,6 +289,127 @@ class DatabaseHelper {
       _seenMessagesTable,
       where: 'seen_at < ?',
       whereArgs: [olderThanEpochMs],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Conversation & Peer Queries
+  // ---------------------------------------------------------------------------
+
+  /// Retrieves messages exchanged between this device and a given peer.
+  Future<List<MessagePacket>> getConversationMessages(
+    String peerId, {
+    String? peerUserId,
+  }) async {
+    final db = await database;
+    final String whereClause;
+    final List<dynamic> whereArgs;
+
+    if (peerUserId != null && peerUserId.isNotEmpty && peerUserId != peerId) {
+      whereClause = '''
+        (sender_node_id = ? OR receiver_node_id = ? OR sender_id = ? OR receiver_id = ?)
+        OR (sender_node_id = ? OR receiver_node_id = ? OR sender_id = ? OR receiver_id = ?)
+      ''';
+      whereArgs = [
+        peerId, peerId, peerId, peerId,
+        peerUserId, peerUserId, peerUserId, peerUserId,
+      ];
+    } else {
+      whereClause = '''
+        sender_node_id = ? OR receiver_node_id = ? OR sender_id = ? OR receiver_id = ?
+      ''';
+      whereArgs = [peerId, peerId, peerId, peerId];
+    }
+
+    final rows = await db.query(
+      _messagesTable,
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'timestamp ASC',
+    );
+    return rows.map((r) => MessagePacket.fromJson(r)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Emergency Reports CRUD
+  // ---------------------------------------------------------------------------
+
+  /// Inserts or replaces an emergency report in SQLite.
+  Future<int> insertEmergencyReport(Map<String, dynamic> report) async {
+    final db = await database;
+    return db.insert(
+      _emergencyTable,
+      report,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns all stored emergency reports, newest first.
+  Future<List<Map<String, dynamic>>> getAllEmergencyReports() async {
+    final db = await database;
+    return db.query(_emergencyTable, orderBy: 'timestamp DESC');
+  }
+
+  /// Returns pending emergency reports that have not yet been synced to backend.
+  Future<List<Map<String, dynamic>>> getPendingEmergencyReports() async {
+    final db = await database;
+    return db.query(
+      _emergencyTable,
+      where: 'status = ?',
+      whereArgs: ['PENDING'],
+      orderBy: 'timestamp ASC',
+    );
+  }
+
+  /// Updates status of an emergency report (e.g. 'SYNCED').
+  Future<int> updateEmergencyReportStatus(String reportId, String status) async {
+    final db = await database;
+    return db.update(
+      _emergencyTable,
+      {'status': status},
+      where: 'report_id = ?',
+      whereArgs: [reportId],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Contacts CRUD
+  // ---------------------------------------------------------------------------
+
+  /// Inserts or updates a contact (family member or discovered peer).
+  Future<int> insertOrUpdateContact(Map<String, dynamic> contact) async {
+    final db = await database;
+    return db.insert(
+      _contactsTable,
+      contact,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retrieves all cached contacts.
+  Future<List<Map<String, dynamic>>> getAllContacts() async {
+    final db = await database;
+    return db.query(_contactsTable, orderBy: 'name ASC');
+  }
+
+  /// Retrieves all family contacts.
+  Future<List<Map<String, dynamic>>> getFamilyContacts() async {
+    final db = await database;
+    return db.query(
+      _contactsTable,
+      where: 'relation = ?',
+      whereArgs: ['family'],
+      orderBy: 'name ASC',
+    );
+  }
+
+  /// Deletes a contact by ID.
+  Future<int> deleteContact(String id) async {
+    final db = await database;
+    return db.delete(
+      _contactsTable,
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 

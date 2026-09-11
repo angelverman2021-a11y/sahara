@@ -148,26 +148,43 @@ class _NearbyScreenState extends State<NearbyScreen> {
             Expanded(
               child: filteredPeople.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.search_off_rounded,
-                            size: 40,
-                            color: AppTheme.textMuted,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            query.isEmpty
-                                ? 'No nearby mesh peers in range'
-                                : context.tr('no_peers_found', {'query': query}),
-                            style: const TextStyle(
-                              fontFamily: AppTheme.fontFamily,
-                              fontSize: 14,
-                              color: AppTheme.textSecondary,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              query.isEmpty ? Icons.radar_rounded : Icons.search_off_rounded,
+                              size: 44,
+                              color: AppTheme.primaryNavy,
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 12),
+                            Text(
+                              query.isEmpty
+                                  ? 'Searching for nearby SAHARA devices...'
+                                  : context.tr('no_peers_found', {'query': query}),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontFamily: AppTheme.fontFamily,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            if (query.isEmpty) ...[
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Make sure Bluetooth and Location are turned on on both devices and stay within radio range.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: AppTheme.fontFamily,
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     )
                   : ListView.separated(

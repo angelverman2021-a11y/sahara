@@ -110,8 +110,8 @@ class UserProfile {
   }
 }
 
-/// The 10 disaster-region focused Indian languages prioritized for
-/// flood/cyclone-prone regions (Assam, Odisha, Bihar, West Bengal, Kerala, Gujarat, Andhra/Telangana).
+/// The 15 disaster-region focused Indian languages prioritized for
+/// flood/cyclone-prone regions across India.
 class SupportedLanguages {
   static const List<Map<String, String>> list = [
     {'code': 'en', 'name': 'English', 'native': 'English'},
@@ -124,5 +124,10 @@ class SupportedLanguages {
     {'code': 'mai', 'name': 'Maithili', 'native': 'मैथिली'},
     {'code': 'brx', 'name': 'Bodo', 'native': 'बड़ो'},
     {'code': 'te', 'name': 'Telugu', 'native': 'తెలుగు'},
+    {'code': 'mr', 'name': 'Marathi', 'native': 'मराठी'},
+    {'code': 'ta', 'name': 'Tamil', 'native': 'தமிழ்'},
+    {'code': 'kn', 'name': 'Kannada', 'native': 'ಕನ್ನಡ'},
+    {'code': 'pa', 'name': 'Punjabi', 'native': 'ਪੰਜਾਬੀ'},
+    {'code': 'ks', 'name': 'Kashmiri', 'native': 'कॉशुर'},
   ];
 }

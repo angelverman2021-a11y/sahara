@@ -3,7 +3,6 @@
 // Strictly decouples physical hardware transport from the MeshService routing engine.
 
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 
@@ -20,6 +19,9 @@ import 'mesh_service.dart';
 class NearbyConnectionsTransport implements MeshTransport {
   /// Physical mesh node ID of this device (e.g., "NODE_A01")
   final String localNodeId;
+
+  /// Human-readable display name from user profile (e.g., "Shreya Arora")
+  String? localDisplayName;
 
   /// Service identifier matching across all SAHARA emergency nodes
   final String serviceId;
@@ -43,6 +45,9 @@ class NearbyConnectionsTransport implements MeshTransport {
   /// Maps Nearby session endpointId -> SAHARA physical node_id
   final Map<String, String> _endpointIdToNodeId = <String, String>{};
 
+  /// Maps SAHARA physical node_id -> human display name
+  final Map<String, String> _nodeIdToDisplayName = <String, String>{};
+
   /// Currently connected peer node IDs
   final Set<String> _connectedPeers = <String>{};
 
@@ -51,10 +56,33 @@ class NearbyConnectionsTransport implements MeshTransport {
 
   NearbyConnectionsTransport({
     required this.localNodeId,
+    this.localDisplayName,
     this.serviceId = 'com.sahara.emergency.mesh',
     this.strategy = Strategy.P2P_CLUSTER,
     Nearby? nearby,
   }) : nearby = nearby ?? Nearby();
+
+  /// User-friendly display names discovered for peer node IDs
+  Map<String, String> get discoveredNodeNames => Map.unmodifiable(_nodeIdToDisplayName);
+
+  /// Helper to parse "NODE_xxxx:DisplayName" into (nodeId, displayName)
+  static (String nodeId, String? displayName) parseEndpointName(String raw) {
+    if (raw.contains(':')) {
+      final idx = raw.indexOf(':');
+      final nodeId = raw.substring(0, idx).trim();
+      final name = raw.substring(idx + 1).trim();
+      return (nodeId, name.isNotEmpty ? name : null);
+    }
+    return (raw.trim(), null);
+  }
+
+  /// The broadcasted discovery/advertising name combining localNodeId and localDisplayName
+  String get _compositeEndpointName {
+    if (localDisplayName != null && localDisplayName!.trim().isNotEmpty) {
+      return '$localNodeId:${localDisplayName!.trim()}';
+    }
+    return localNodeId;
+  }
 
   // ---------------------------------------------------------------------------
   // MeshTransport Interface Implementation
@@ -134,9 +162,9 @@ class NearbyConnectionsTransport implements MeshTransport {
     if (_isAdvertising) return;
 
     try {
-      debugPrint('[SAHARA TRANSPORT] Starting advertising as Node ID: $localNodeId...');
+      final advertisedName = _compositeEndpointName;
       final started = await nearby.startAdvertising(
-        localNodeId,
+        advertisedName,
         strategy,
         onConnectionInitiated: _handleConnectionInitiated,
         onConnectionResult: _handleConnectionResult,
@@ -144,9 +172,7 @@ class NearbyConnectionsTransport implements MeshTransport {
         serviceId: serviceId,
       );
       _isAdvertising = started;
-      debugPrint('[SAHARA TRANSPORT] Advertising started: $started (Node ID: $localNodeId)');
-    } catch (e) {
-      debugPrint('[SAHARA TRANSPORT] Advertising failed to start: $e');
+    } catch (_) {
       _isAdvertising = false;
     }
   }
@@ -159,7 +185,6 @@ class NearbyConnectionsTransport implements MeshTransport {
     if (_isDiscovering) return;
 
     try {
-      debugPrint('[SAHARA TRANSPORT] Starting discovery as Node ID: $localNodeId...');
       final started = await nearby.startDiscovery(
         localNodeId,
         strategy,
@@ -168,9 +193,7 @@ class NearbyConnectionsTransport implements MeshTransport {
         serviceId: serviceId,
       );
       _isDiscovering = started;
-      debugPrint('[SAHARA TRANSPORT] Discovery started: $started (Node ID: $localNodeId)');
-    } catch (e) {
-      debugPrint('[SAHARA TRANSPORT] Discovery failed to start: $e');
+    } catch (_) {
       _isDiscovering = false;
     }
   }
@@ -181,8 +204,10 @@ class NearbyConnectionsTransport implements MeshTransport {
 
   /// Triggered when a nearby SAHARA peer endpoint is discovered.
   void _handleEndpointFound(String endpointId, String endpointName, String serviceId) async {
-    final peerNodeId = endpointName;
-    debugPrint('[SAHARA TRANSPORT] Endpoint discovered: $endpointId -> Node ID: $peerNodeId');
+    final (peerNodeId, peerDisplayName) = parseEndpointName(endpointName);
+    if (peerDisplayName != null && peerDisplayName.isNotEmpty) {
+      _nodeIdToDisplayName[peerNodeId] = peerDisplayName;
+    }
     _endpointIdToNodeId[endpointId] = peerNodeId;
     _nodeIdToEndpointId[peerNodeId] = endpointId;
 
@@ -191,19 +216,35 @@ class NearbyConnectionsTransport implements MeshTransport {
       peerId: peerNodeId,
     ));
 
-    // In P2P_CLUSTER, initiate connection if not already connected
+    // In P2P_CLUSTER, prevent collision when both devices discover simultaneously.
+    // Device with lexicographically larger ID initiates connection immediately.
+    // The other device sets a fallback timer in case initiator has not connected yet.
     if (!_connectedPeers.contains(peerNodeId)) {
-      try {
-        debugPrint('[SAHARA TRANSPORT] Requesting connection to $endpointId ($peerNodeId)...');
-        await nearby.requestConnection(
-          localNodeId,
-          endpointId,
-          onConnectionInitiated: _handleConnectionInitiated,
-          onConnectionResult: _handleConnectionResult,
-          onDisconnected: _handleDisconnected,
-        );
-      } catch (e) {
-        debugPrint('[SAHARA TRANSPORT] Connection request collision/error with $peerNodeId: $e');
+      if (localNodeId.compareTo(peerNodeId) > 0) {
+        try {
+          await nearby.requestConnection(
+            _compositeEndpointName,
+            endpointId,
+            onConnectionInitiated: _handleConnectionInitiated,
+            onConnectionResult: _handleConnectionResult,
+            onDisconnected: _handleDisconnected,
+          );
+        } catch (_) {}
+      } else {
+        // Fallback retry after 3 seconds if not connected
+        Timer(const Duration(seconds: 3), () async {
+          if (!_connectedPeers.contains(peerNodeId) && _endpointIdToNodeId.containsKey(endpointId)) {
+            try {
+              await nearby.requestConnection(
+                _compositeEndpointName,
+                endpointId,
+                onConnectionInitiated: _handleConnectionInitiated,
+                onConnectionResult: _handleConnectionResult,
+                onDisconnected: _handleDisconnected,
+              );
+            } catch (_) {}
+          }
+        });
       }
     }
   }
@@ -212,7 +253,6 @@ class NearbyConnectionsTransport implements MeshTransport {
   void _handleEndpointLost(String? endpointId) {
     if (endpointId == null) return;
     final peerNodeId = _endpointIdToNodeId[endpointId];
-    debugPrint('[SAHARA TRANSPORT] Endpoint lost: $endpointId ($peerNodeId)');
     if (peerNodeId != null && !_connectedPeers.contains(peerNodeId)) {
       _endpointIdToNodeId.remove(endpointId);
       _nodeIdToEndpointId.remove(peerNodeId);
@@ -221,13 +261,14 @@ class NearbyConnectionsTransport implements MeshTransport {
 
   /// Triggered when either peer requests a connection. Automatically accepts.
   void _handleConnectionInitiated(String endpointId, ConnectionInfo info) async {
-    final peerNodeId = info.endpointName;
-    debugPrint('[SAHARA TRANSPORT] Connection initiated: $endpointId ($peerNodeId), incoming: ${info.isIncomingConnection}');
+    final (peerNodeId, peerDisplayName) = parseEndpointName(info.endpointName);
+    if (peerDisplayName != null && peerDisplayName.isNotEmpty) {
+      _nodeIdToDisplayName[peerNodeId] = peerDisplayName;
+    }
     _endpointIdToNodeId[endpointId] = peerNodeId;
     _nodeIdToEndpointId[peerNodeId] = endpointId;
 
     try {
-      debugPrint('[SAHARA TRANSPORT] Auto-accepting connection with $endpointId ($peerNodeId)...');
       await nearby.acceptConnection(
         endpointId,
         onPayLoadRecieved: (String epId, Payload payload) {
@@ -248,19 +289,17 @@ class NearbyConnectionsTransport implements MeshTransport {
           debugPrint('[SAHARA TRANSPORT RECEIVE] Transfer update for endpoint=$epId: status=${update.status}, bytes=${update.bytesTransferred}/${update.totalBytes}');
         },
       );
-    } catch (e) {
-      debugPrint('[SAHARA TRANSPORT] Error accepting connection from $peerNodeId: $e');
+    } catch (_) {
+      // Handshake error
     }
   }
 
   /// Triggered when the mutual connection handshake succeeds or fails.
   void _handleConnectionResult(String endpointId, Status status) {
     final peerNodeId = _endpointIdToNodeId[endpointId] ?? endpointId;
-    debugPrint('[SAHARA TRANSPORT] Connection result for $endpointId ($peerNodeId): $status');
 
     if (status == Status.CONNECTED) {
       _connectedPeers.add(peerNodeId);
-      debugPrint('[SAHARA TRANSPORT] Peer connected: $peerNodeId (Total active peers: ${_connectedPeers.length})');
       _eventsController.add(MeshTransportEvent(
         type: MeshTransportEventType.peerConnected,
         peerId: peerNodeId,
@@ -269,7 +308,6 @@ class NearbyConnectionsTransport implements MeshTransport {
       _connectedPeers.remove(peerNodeId);
       _endpointIdToNodeId.remove(endpointId);
       _nodeIdToEndpointId.remove(peerNodeId);
-      debugPrint('[SAHARA TRANSPORT] Peer connection failed/rejected: $peerNodeId');
       _eventsController.add(MeshTransportEvent(
         type: MeshTransportEventType.peerDisconnected,
         peerId: peerNodeId,
@@ -283,7 +321,6 @@ class NearbyConnectionsTransport implements MeshTransport {
     _nodeIdToEndpointId.remove(peerNodeId);
     _connectedPeers.remove(peerNodeId);
 
-    debugPrint('[SAHARA TRANSPORT] Peer disconnected: $peerNodeId (Remaining active peers: ${_connectedPeers.length})');
     _eventsController.add(MeshTransportEvent(
       type: MeshTransportEventType.peerDisconnected,
       peerId: peerNodeId,

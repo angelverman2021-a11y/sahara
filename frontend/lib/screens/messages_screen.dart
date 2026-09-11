@@ -82,10 +82,10 @@ class MessagesScreen extends StatelessWidget {
   }
 
   static String _formatLastMessageTime(String personId, String? timeFormatted) {
-    if (personId == 'fam_mother') return '2 min ago';
-    if (personId == 'contact_rahul') return '5 min ago';
-    if (personId == 'contact_emergency_team') return '12 min ago';
-    return timeFormatted ?? 'Recently';
+    if (timeFormatted != null && timeFormatted.isNotEmpty) {
+      return timeFormatted;
+    }
+    return 'Just now';
   }
 }
 

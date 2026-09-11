@@ -32,20 +32,9 @@ class StatusCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Mesh status
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: status.isMeshActive
-                    ? AppTheme.activeGreen
-                    : AppTheme.textMuted,
-              ),
-            ),
-            const SizedBox(width: 8),
+            // Mesh availability text (green dot removed per requirement)
             Text(
-              status.isMeshActive ? context.tr('mesh_active') : context.tr('mesh_inactive'),
+              '${status.nearbyCount} meshes available',
               style: const TextStyle(
                 fontFamily: AppTheme.fontFamily,
                 fontSize: 13.5,
@@ -60,19 +49,13 @@ class StatusCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
 
-            // Nearby count
+            // Active mesh network status
             Expanded(
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.people_outline,
-                    size: 15,
-                    color: AppTheme.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
                   Flexible(
                     child: Text(
-                      '${status.nearbyCount} ${context.tr('peers_nearby')}',
+                      status.isMeshActive ? context.tr('mesh_active') : context.tr('mesh_inactive'),
                       style: const TextStyle(
                         fontFamily: AppTheme.fontFamily,
                         fontSize: 13,

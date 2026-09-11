@@ -8,7 +8,7 @@ import string
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-VALID_MESSAGE_TYPES = {"SOS", "EMERGENCY", "FAMILY", "BROADCAST", "STATUS"}
+VALID_MESSAGE_TYPES = {"SOS", "EMERGENCY", "FAMILY", "BROADCAST", "STATUS", "TEXT"}
 VALID_PRIORITIES = {"Highest", "High", "Normal"}
 VALID_STATUSES = {"PENDING", "SYNCED", "DELIVERED"}
 VALID_EMERGENCY_TYPES = {"SOS", "HAZARD", "EVACUATION", "EMERGENCY"}

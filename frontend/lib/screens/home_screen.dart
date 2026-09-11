@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/person.dart';
+import '../services/backend_client.dart';
 import '../services/emergency_service.dart';
 import '../services/native_bridge.dart';
+import '../services/notification_service.dart';
+import '../services/sahara_emergency_service.dart';
 import '../services/service_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localizations.dart';
@@ -34,6 +37,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _syncBattery();
+    _checkInitialNotification();
+  }
+
+  Future<void> _checkInitialNotification() async {
+    try {
+      final initialAction = await NotificationService().getInitialNotificationAction();
+      if (initialAction != null && mounted) {
+        NotificationService().handleNotificationAction(initialAction);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -75,6 +88,151 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _showBackendSettings(BuildContext context, dynamic service) {
+    if (service is! SaharaEmergencyService) return;
+
+    final urlController = TextEditingController(text: service.backendClient.baseUrl);
+    bool testing = false;
+    String statusMessage = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radius)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.cloud_sync_rounded, color: AppTheme.primaryNavy, size: 22),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Backend Server & Cloud Sync',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontFamily,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Configure the reachable IP or host of the SAHARA Python backend server on your local Wi-Fi / LAN network.',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 12.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Backend Base URL',
+                      hintText: 'e.g. http://192.168.1.15:8000',
+                      prefixIcon: Icon(Icons.link_rounded, size: 18),
+                    ),
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 12),
+                  if (statusMessage.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        statusMessage,
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontFamily,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: statusMessage.contains('success') || statusMessage.contains('Online')
+                              ? AppTheme.activeGreen
+                              : AppTheme.emergencyRed,
+                        ),
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: testing
+                              ? null
+                              : () async {
+                                  setModalState(() {
+                                    testing = true;
+                                    statusMessage = 'Testing connectivity...';
+                                  });
+                                  final newUrl = urlController.text.trim();
+                                  service.backendClient.setBaseUrl(newUrl);
+                                  await BackendClient.saveStoredBackendUrl(newUrl);
+
+                                  final ok = await service.backendClient.checkHealth();
+                                  setModalState(() {
+                                    testing = false;
+                                    statusMessage = ok
+                                        ? 'Server Online (Health Check Passed)'
+                                        : 'Server Unreachable. Verify IP and Wi-Fi.';
+                                  });
+                                },
+                          child: Text(testing ? 'Testing...' : 'Test Connection'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: testing
+                              ? null
+                              : () async {
+                                  setModalState(() {
+                                    testing = true;
+                                    statusMessage = 'Synchronizing...';
+                                  });
+                                  final newUrl = urlController.text.trim();
+                                  service.backendClient.setBaseUrl(newUrl);
+                                  await BackendClient.saveStoredBackendUrl(newUrl);
+
+                                  final res = await service.syncWithBackend();
+                                  setModalState(() {
+                                    testing = false;
+                                    statusMessage = res.success
+                                        ? 'Sync successful: ${res.messagesSynced} msg, ${res.reportsSynced} reports'
+                                        : (res.errorMessage ?? 'Sync failed');
+                                  });
+                                },
+                          child: const Text('Sync Now'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final service = EmergencyServiceScope.of(context);
@@ -99,6 +257,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     color: AppTheme.primaryNavy,
                   ),
                   const Spacer(),
+                  InkWell(
+                    onTap: () => _showBackendSettings(context, service),
+                    borderRadius: BorderRadius.circular(AppTheme.radius),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(AppTheme.radius),
+                        border: Border.all(color: AppTheme.surfaceBorder),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cloud_sync_outlined, size: 15, color: AppTheme.primaryNavy),
+                          SizedBox(width: 4),
+                          Text(
+                            'Sync',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryNavy,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   InkWell(
                     onTap: () => _openLanguagePicker(context, service),
                     borderRadius: BorderRadius.circular(AppTheme.radius),

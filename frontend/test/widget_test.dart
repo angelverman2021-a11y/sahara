@@ -3,8 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sahra/main.dart';
 import 'package:sahra/models/announcement.dart';
 import 'package:sahra/models/message_model.dart';
+import 'package:sahra/models/user_profile.dart';
+import 'package:sahra/screens/splash_screen.dart';
 import 'package:sahra/services/mesh_service.dart';
 import 'package:sahra/services/mock_service.dart';
+import 'package:sahra/services/notification_service.dart';
+import 'package:sahra/utils/app_localizations.dart';
 import 'package:sahra/utils/broadcast_localizer.dart';
 import 'package:sahra/utils/date_input_formatter.dart';
 import 'package:sahra/utils/location_helper.dart';
@@ -30,7 +34,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -45,7 +49,7 @@ void main() {
 
     // 3. Compact Mesh Status
     expect(find.text('Mesh Active'), findsOneWidget);
-    expect(find.textContaining('Peers nearby'), findsOneWidget);
+    expect(find.textContaining('meshes available'), findsOneWidget);
 
     // 4. Prominent Circular SOS Button
     expect(find.byType(SosButton), findsOneWidget);
@@ -72,7 +76,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -110,7 +114,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -140,6 +144,7 @@ void main() {
 
     // Tap Send
     await tester.tap(find.byTooltip('Send Mesh Message'));
+    await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
 
     // Verify message is added to UI locally
@@ -150,7 +155,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -185,7 +190,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService(initialPeers: ['NODE_6829AE']);
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -229,7 +234,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Initially 0 peers
-    expect(find.textContaining('0 Peers nearby'), findsOneWidget);
+    expect(find.textContaining('meshes available'), findsOneWidget);
     expect(find.textContaining('0 mesh peers detected'), findsOneWidget);
 
     // Navigate to Nearby People
@@ -239,7 +244,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('0 People Discovered in Range'), findsOneWidget);
-    expect(find.text('No nearby mesh peers in range'), findsOneWidget);
+    expect(find.text('Searching for nearby SAHARA devices...'), findsOneWidget);
 
     // Simulate real peer connection (e.g. NODE_6829AE -> Aarav Sharma)
     mockService.updateConnectedPeers(['NODE_6829AE']);
@@ -258,7 +263,7 @@ void main() {
 
     // UI updates reactively to 0 peers
     expect(find.text('0 People Discovered in Range'), findsOneWidget);
-    expect(find.text('No nearby mesh peers in range'), findsOneWidget);
+    expect(find.text('Searching for nearby SAHARA devices...'), findsOneWidget);
     expect(find.text('Aarav Sharma'), findsNothing);
   });
 
@@ -288,7 +293,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -336,7 +341,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -369,6 +374,41 @@ void main() {
     expect(find.text('కుటుంబం'), findsOneWidget);
     expect(find.text('దగ్గరలోని వ్యక్తులు'), findsOneWidget);
 
+    // Switch to Marathi
+    await mockService.setLanguage('Marathi');
+    await tester.pumpAndSettle();
+
+    expect(find.text('मेश सक्रिय'), findsOneWidget);
+    expect(find.text('कुटुंब'), findsOneWidget);
+
+    // Switch to Tamil
+    await mockService.setLanguage('Tamil');
+    await tester.pumpAndSettle();
+
+    expect(find.text('மெஷ் செயல்படுகிறது'), findsOneWidget);
+    expect(find.text('குடும்பம்'), findsOneWidget);
+
+    // Switch to Kannada
+    await mockService.setLanguage('Kannada');
+    await tester.pumpAndSettle();
+
+    expect(find.text('ಮೆಶ್ ಸಕ್ರಿಯವಾಗಿದೆ'), findsOneWidget);
+    expect(find.text('ಕುಟುಂಬ'), findsOneWidget);
+
+    // Switch to Punjabi
+    await mockService.setLanguage('Punjabi');
+    await tester.pumpAndSettle();
+
+    expect(find.text('ਮੈਸ਼ ਸਰਗਰਮ ਹੈ'), findsOneWidget);
+    expect(find.text('ਪਰਿਵਾਰ'), findsOneWidget);
+
+    // Switch to Kashmiri
+    await mockService.setLanguage('Kashmiri');
+    await tester.pumpAndSettle();
+
+    expect(find.text('मेश चालू छु'), findsOneWidget);
+    expect(find.text('खानदान'), findsOneWidget);
+
     // Switch back to English
     await mockService.setLanguage('English');
     await tester.pumpAndSettle();
@@ -381,7 +421,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: false,
     ));
     await tester.pumpAndSettle();
@@ -407,7 +447,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -552,7 +592,7 @@ void main() {
     setPhoneViewport(tester);
     final mockService = MockService();
     await tester.pumpWidget(SaharaApp(
-      mockService: mockService,
+      emergencyService: mockService,
       initialIsOnboarded: true,
     ));
     await tester.pumpAndSettle();
@@ -581,6 +621,163 @@ void main() {
 
     // Verified: Announcement title changed to Odia!
     expect(find.text('ବାତ୍ୟା ସତର୍କତା'), findsOneWidget);
+  });
+
+
+  test('All 15 disaster-region languages are defined in SupportedLanguages', () {
+    expect(SupportedLanguages.list.length, 15);
+    final codes = SupportedLanguages.list.map((l) => l['code']).toList();
+    expect(codes, containsAll([
+      'en', 'hi', 'or', 'bn', 'as',
+      'ml', 'gu', 'mai', 'brx', 'te',
+      'mr', 'ta', 'kn', 'pa', 'ks',
+    ]));
+
+    final nativeNames = SupportedLanguages.list.map((l) => l['native']).toList();
+    expect(nativeNames, containsAll([
+      'English', 'हिन्दी', 'ଓଡ଼ିଆ', 'বাংলা', 'অসমীয়া',
+      'മലയാളം', 'ગુજરાતી', 'मैथिली', 'बड़ो', 'తెలుగు',
+      'मराठी', 'தமிழ்', 'ಕನ್ನಡ', 'ਪੰਜਾਬੀ', 'कॉशुर',
+    ]));
+  });
+
+  test('AppLocalizations codeForLanguage recognizes all 15 languages', () {
+    expect(AppLocalizations.codeForLanguage('English'), 'en');
+    expect(AppLocalizations.codeForLanguage('Hindi'), 'hi');
+    expect(AppLocalizations.codeForLanguage('Odia'), 'or');
+    expect(AppLocalizations.codeForLanguage('Bengali'), 'bn');
+    expect(AppLocalizations.codeForLanguage('Assamese'), 'as');
+    expect(AppLocalizations.codeForLanguage('Malayalam'), 'ml');
+    expect(AppLocalizations.codeForLanguage('Gujarati'), 'gu');
+    expect(AppLocalizations.codeForLanguage('Maithili'), 'mai');
+    expect(AppLocalizations.codeForLanguage('Bodo'), 'brx');
+    expect(AppLocalizations.codeForLanguage('Telugu'), 'te');
+    expect(AppLocalizations.codeForLanguage('Marathi'), 'mr');
+    expect(AppLocalizations.codeForLanguage('Tamil'), 'ta');
+    expect(AppLocalizations.codeForLanguage('Kannada'), 'kn');
+    expect(AppLocalizations.codeForLanguage('Punjabi'), 'pa');
+    expect(AppLocalizations.codeForLanguage('Kashmiri'), 'ks');
+  });
+
+  test('BroadcastLocalizer produces all 15 language translations for composed broadcasts and SOS', () {
+    final translations = BroadcastLocalizer.getTranslationsForComposed(
+      title: 'Cyclone Warning',
+      message: 'Road blocked near Gate 2.',
+      severity: AnnouncementSeverity.warning,
+      source: 'Disaster Cell',
+    );
+
+    const expected15 = [
+      'en', 'hi', 'or', 'bn', 'as',
+      'ml', 'gu', 'mai', 'brx', 'te',
+      'mr', 'ta', 'kn', 'pa', 'ks',
+    ];
+
+    for (final lang in expected15) {
+      expect(translations.containsKey(lang), true, reason: 'Missing composed broadcast translation for $lang');
+      expect(translations[lang]?.title.isNotEmpty, true);
+      expect(translations[lang]?.message.isNotEmpty, true);
+    }
+
+    final sos = BroadcastLocalizer.getSosTranslations('28.5355° N, 77.3910° E');
+    for (final lang in expected15) {
+      expect(sos.containsKey(lang), true, reason: 'Missing SOS translation for $lang');
+      expect(sos[lang]?.contains('28.5355° N, 77.3910° E'), true);
+    }
+  });
+
+  testWidgets('SplashScreen displays pure white background and official Sahara logo', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService();
+
+    await tester.pumpWidget(SaharaApp(
+      mockService: mockService,
+      showSplashScreen: true,
+      initialIsOnboarded: true,
+    ));
+
+    // Initially on SplashScreen
+    expect(find.byType(SplashScreen), findsOneWidget);
+
+    // Verify background color is pure white
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.backgroundColor, Colors.white);
+
+    // Verify official Sahara logo asset is centered
+    expect(find.byType(Image), findsOneWidget);
+    final imageWidget = tester.widget<Image>(find.byType(Image));
+    expect((imageWidget.image as AssetImage).assetName, 'assets/images/sahara_logo.png');
+
+    // Wait for the timer and navigation
+    await tester.pump(const Duration(milliseconds: 1400));
+    await tester.pumpAndSettle();
+  });
+
+  test('NotificationService handles triggers and MockService generates notifications', () async {
+    final notificationService = NotificationService();
+    final hasPerm = await notificationService.checkPermission();
+    expect(hasPerm, true);
+
+    // Trigger emergency broadcast notification
+    await notificationService.showEmergencyBroadcastNotification(
+      title: 'Cyclone Alert',
+      message: 'Take shelter immediately',
+      severity: AnnouncementSeverity.evacuation,
+    );
+
+    // Trigger family message notification
+    await notificationService.showFamilyMessageNotification(
+      senderName: 'Mother',
+      content: 'Power is out',
+      personId: 'fam_mother',
+    );
+
+    final mockService = MockService();
+    mockService.receiveFamilyMessage(
+      senderId: 'fam_mother',
+      content: 'Testing incoming family message',
+    );
+
+    final messages = mockService.getMessages('fam_mother');
+    expect(messages.last.content, 'Testing incoming family message');
+    expect(messages.last.isFromMe, false);
+  });
+
+  testWidgets('Tapping broadcast in EmergencyBroadcastFeed opens detail dialog', (WidgetTester tester) async {
+    setPhoneViewport(tester);
+    final mockService = MockService();
+    await tester.pumpWidget(SaharaApp(
+      emergencyService: mockService,
+      initialIsOnboarded: true,
+    ));
+    await tester.pumpAndSettle();
+
+    // Tap on Cyclone Warning broadcast
+    await tester.tap(find.text('Cyclone Warning'));
+    await tester.pumpAndSettle();
+
+    // Verify detail dialog is shown
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Cyclone Warning'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.textContaining('Heavy rainfall and wind speeds up to 65 km/h'),
+      ),
+      findsOneWidget,
+    );
+
+    // Tap close
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   testWidgets('Real physical mesh peer direct message flow transmits, receives and renders across two nodes with strict user_id vs node_id identity separation', (WidgetTester tester) async {
@@ -624,7 +821,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Node B sees 1 peer nearby
-    expect(find.textContaining('1 Peers nearby'), findsOneWidget);
+    expect(find.textContaining('1 meshes available'), findsOneWidget);
 
     // Node A sends direct message to Node B
     mockServiceA.sendMessage(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/user_profile.dart';
+import '../../services/notification_service.dart';
 import '../../services/service_scope.dart';
 import '../home_screen.dart';
 import 'completion_screen.dart';
@@ -52,6 +53,11 @@ class _OnboardingCoordinatorState extends State<OnboardingCoordinator> {
     final service = EmergencyServiceScope.of(context);
     final completedProfile = _profile.copyWith(isCompleted: true);
     await service.saveUserProfile(completedProfile);
+
+    // Contextually request Android notification permission on first completion
+    try {
+      await NotificationService().requestPermission();
+    } catch (_) {}
 
     if (mounted) {
       Navigator.pushReplacement(
