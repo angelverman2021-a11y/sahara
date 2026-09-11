@@ -9,9 +9,6 @@
 *From the Hindi सहारा — meaning support, refuge, and help.*
 *Built by three women who believe no one should ever be unreachable.*
 
-[![Build](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square&logo=github)](https://github.com/angelverman2021-a11y/sahara/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Offline](https://img.shields.io/badge/offline-mesh_ready-orange?style=flat-square&logo=signal)](https://github.com/angelverman2021-a11y/sahara)
 [![Flutter](https://img.shields.io/badge/flutter-3.x-61dafb?style=flat-square&logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/dart-87%25-0175C2?style=flat-square&logo=dart)](https://dart.dev)
 [![Python](https://img.shields.io/badge/python-11%25-3776AB?style=flat-square&logo=python)](https://python.org)
