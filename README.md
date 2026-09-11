@@ -7,7 +7,6 @@
 **Offline Emergency Communication & Disaster Relief Network**
 
 *From the Hindi सहारा — meaning support, refuge, and help.*
-*Built by three women who believe no one should ever be unreachable.*
 
 [![Flutter](https://img.shields.io/badge/flutter-3.x-61dafb?style=flat-square&logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/dart-87%25-0175C2?style=flat-square&logo=dart)](https://dart.dev)
